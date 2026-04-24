@@ -215,10 +215,10 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
   const pathRef = useRef(path)
   pathRef.current = path
 
-  // Send mission to backend/sim only when POIs are added (not removed/completed)
+  // Send mission to backend/sim when POIs are added pre-flight only
   const prevSendCountRef = useRef(0)
   useEffect(() => {
-    if (pois.length === 0 || pois.length <= prevSendCountRef.current) {
+    if (pois.length === 0 || pois.length <= prevSendCountRef.current || pathJoinedRef.current) {
       prevSendCountRef.current = pois.length
       return
     }
@@ -236,11 +236,17 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
     })
   }, [pois, effectiveArcMode, send])
 
-  // Reset consumption on POI addition or clear only
+  // Reset consumption: clear always resets. Addition only resets if the
+  // drone hasn't joined the path yet (pre-flight). Mid-flight additions
+  // are ignored — drone finishes its current path first.
   useEffect(() => {
-    if (pois.length > prevPoiCountRef.current || pois.length === 0) {
+    if (pois.length === 0) {
       pathProgressRef.current = 0
       pathJoinedRef.current = false
+      frozenPathRef.current = []
+      lastPoiIdRef.current = null
+    } else if (pois.length > prevPoiCountRef.current && !pathJoinedRef.current) {
+      pathProgressRef.current = 0
       frozenPathRef.current = []
       lastPoiIdRef.current = null
     }
