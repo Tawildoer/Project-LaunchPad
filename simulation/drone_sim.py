@@ -126,10 +126,53 @@ class DroneState:
             self.mode = "LOITER"
             return
 
-        # Steer toward a lookahead point for smooth tracking
-        lookahead = min(self.path_index + 3, len(self.mission_path) - 1)
-        target = self.mission_path[lookahead]
-        self._steer_toward(target["lat"], target["lon"], dt)
+        # Pure pursuit: find the point on the path a fixed distance ahead
+        # of the drone's projection, then steer toward it.
+        lookahead_m = self.min_turn_radius * 2
+        seg = self.path_index
+        curr = self.mission_path[seg]
+        nxt = self.mission_path[min(seg + 1, len(self.mission_path) - 1)]
+
+        # Project drone onto current segment to find the closest point on path
+        ax = (nxt["lon"] - curr["lon"]) * cos_lat * DEG_TO_M
+        ay = (nxt["lat"] - curr["lat"]) * DEG_TO_M
+        bx = (self.lon - curr["lon"]) * cos_lat * DEG_TO_M
+        by = (self.lat - curr["lat"]) * DEG_TO_M
+        seg_len_sq = ax * ax + ay * ay
+        t = max(0.0, min(1.0, (ax * bx + ay * by) / seg_len_sq)) if seg_len_sq > 0 else 0.0
+        seg_len = math.sqrt(seg_len_sq)
+        remaining_on_seg = seg_len * (1.0 - t)
+
+        # Walk forward along path segments until we've covered lookahead_m
+        dist_left = lookahead_m
+        walk_seg = seg
+
+        if remaining_on_seg >= dist_left:
+            frac = t + dist_left / seg_len if seg_len > 0 else 1.0
+            p0 = self.mission_path[walk_seg]
+            p1 = self.mission_path[min(walk_seg + 1, len(self.mission_path) - 1)]
+            target_lat = p0["lat"] + frac * (p1["lat"] - p0["lat"])
+            target_lon = p0["lon"] + frac * (p1["lon"] - p0["lon"])
+        else:
+            dist_left -= remaining_on_seg
+            walk_seg += 1
+            while walk_seg < len(self.mission_path) - 1:
+                p0 = self.mission_path[walk_seg]
+                p1 = self.mission_path[walk_seg + 1]
+                sl = dist_m(p0["lat"], p0["lon"], p1["lat"], p1["lon"])
+                if sl >= dist_left:
+                    frac = dist_left / sl if sl > 0 else 0.0
+                    target_lat = p0["lat"] + frac * (p1["lat"] - p0["lat"])
+                    target_lon = p0["lon"] + frac * (p1["lon"] - p0["lon"])
+                    break
+                dist_left -= sl
+                walk_seg += 1
+            else:
+                last = self.mission_path[-1]
+                target_lat = last["lat"]
+                target_lon = last["lon"]
+
+        self._steer_toward(target_lat, target_lon, dt)
 
     def telemetry_dict(self) -> dict:
         noise = 2.0 if self.armed else 0.3
