@@ -128,7 +128,7 @@ class DroneState:
 
         # Pure pursuit: find the point on the path a fixed distance ahead
         # of the drone's projection, then steer toward it.
-        lookahead_m = self.min_turn_radius * 2
+        lookahead_m = self.min_turn_radius
         seg = self.path_index
         curr = self.mission_path[seg]
         nxt = self.mission_path[min(seg + 1, len(self.mission_path) - 1)]
