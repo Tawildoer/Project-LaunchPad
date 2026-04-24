@@ -91,6 +91,7 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
   const trailCountRef   = useRef(0)
   const pathProgressRef = useRef(0)
   const pathJoinedRef   = useRef(false)
+  const frozenPathRef   = useRef<{ lat: number; lon: number; poiId?: string | null }[]>([])
 
   const initialLat = telemetry?.position.lat ?? DEFAULT_LAT
   const initialLon = telemetry?.position.lon ?? DEFAULT_LON
@@ -235,73 +236,78 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
     })
   }, [pois, effectiveArcMode, send])
 
-  // Reset consumption only on POI addition or clear, not removal
+  // Reset consumption on POI addition or clear only
   useEffect(() => {
     if (pois.length > prevPoiCountRef.current || pois.length === 0) {
       pathProgressRef.current = 0
       pathJoinedRef.current = false
+      frozenPathRef.current = []
       lastPoiIdRef.current = null
     }
     prevPoiCountRef.current = pois.length
   }, [pois])
 
-  // Path consumption: show full path until drone reaches it, then peel
-  // back with a windowed closest-segment search on the live path.
+  // Path consumption: freeze the path at join time, then consume with
+  // strict sequential advancement (t >= 1.0 per segment). No searching
+  // ahead — segments are all short (10-15m) so this works reliably.
   const remainingPath = useMemo(() => {
     if (!telemetry || path.length < 2) return path
     const { lat, lon } = telemetry.position
 
-    // Gate: don't consume until drone reaches the path
+    // Before joining: show the live path
     if (!pathJoinedRef.current) {
       if (distMeters(lat, lon, path[0].lat, path[0].lon) <= 80) {
         pathJoinedRef.current = true
+        frozenPathRef.current = [...path]
         pathProgressRef.current = 0
       } else {
         return path
       }
     }
 
-    // Cap progress to path length (path may have changed)
-    if (pathProgressRef.current >= path.length - 1) return path.slice(-1)
+    const fp = frozenPathRef.current
+    if (fp.length < 2) return path
 
-    // Windowed search: find closest segment within 30 ahead of progress
-    const WINDOW = 30
-    const searchEnd = Math.min(pathProgressRef.current + WINDOW, path.length - 1)
-    let bestSeg = pathProgressRef.current
-    let bestDist = Infinity
-    let bestT = 0
+    // Strict sequential advancement: only advance when the drone has
+    // passed the END of the current segment (t >= 1.0). Up to 5 per
+    // tick for high-speed flight. Never skips ahead.
+    let seg = pathProgressRef.current
+    const cosLat = Math.cos(lat * Math.PI / 180)
+    let lastT = 0
+    let steps = 0
 
-    for (let i = pathProgressRef.current; i < searchEnd; i++) {
-      const p0 = path[i], p1 = path[i + 1]
-      const cosLat = Math.cos(lat * Math.PI / 180)
+    while (seg < fp.length - 1 && steps < 5) {
+      const p0 = fp[seg], p1 = fp[seg + 1]
       const ex = (p1.lon - p0.lon) * cosLat * 111320
       const ey = (p1.lat - p0.lat) * 111320
       const fx = (lon - p0.lon) * cosLat * 111320
       const fy = (lat - p0.lat) * 111320
       const segLen2 = ex * ex + ey * ey
-      if (segLen2 < 0.01) continue
-      const t = Math.max(0, Math.min(1, (fx * ex + fy * ey) / segLen2))
-      const projLat = p0.lat + t * (p1.lat - p0.lat)
-      const projLon = p0.lon + t * (p1.lon - p0.lon)
-      const d = distMeters(lat, lon, projLat, projLon)
-      if (d < bestDist) { bestDist = d; bestSeg = i; bestT = t }
+      if (segLen2 < 0.01) { seg++; steps++; continue }
+      lastT = (fx * ex + fy * ey) / segLen2
+      if (lastT >= 1.0) { seg++; steps++ }
+      else break
     }
 
-    pathProgressRef.current = bestSeg
+    pathProgressRef.current = seg
 
-    const p0 = path[bestSeg], p1 = path[bestSeg + 1]
+    if (seg >= fp.length - 1) return fp.slice(-1)
+
+    const tClamped = Math.max(0, Math.min(1, lastT))
+    const p0 = fp[seg], p1 = fp[seg + 1]
     const proj = {
-      lat: p0.lat + bestT * (p1.lat - p0.lat),
-      lon: p0.lon + bestT * (p1.lon - p0.lon),
+      lat: p0.lat + tClamped * (p1.lat - p0.lat),
+      lon: p0.lon + tClamped * (p1.lon - p0.lon),
     }
-    return [proj, ...path.slice(bestSeg + 1)]
+    return [proj, ...fp.slice(seg + 1)]
   }, [telemetry?.position.lat, telemetry?.position.lon, path])
 
-  // Remove POI when the drone's path progress moves past its arc onto a tangent or next POI
+  // Remove POI when progress moves past its arc onto tangent/next POI
   useEffect(() => {
-    if (path.length === 0) return
-    const seg = Math.min(pathProgressRef.current, path.length - 1)
-    const currentPoiId = path[seg].poiId ?? null
+    const fp = frozenPathRef.current
+    if (fp.length === 0) return
+    const seg = Math.min(pathProgressRef.current, fp.length - 1)
+    const currentPoiId = fp[seg].poiId ?? null
     const prevPoiId = lastPoiIdRef.current
     if (prevPoiId && currentPoiId !== prevPoiId) {
       removePoi(prevPoiId)
