@@ -7,7 +7,7 @@ type StatusCallback   = (s: ConnectionStatus) => void
 const CENTER_LAT = -37.854
 const CENTER_LON = 145.059
 const ORBIT_RADIUS_M = 220
-const TICK_MS = 100
+const TICK_MS = 33
 
 function distM(a: { lat: number; lon: number }, b: { lat: number; lon: number }): number {
   const cosLat = Math.cos(a.lat * Math.PI / 180)
@@ -41,12 +41,35 @@ function pathLength(path: { lat: number; lon: number }[]): number {
   return total
 }
 
+function externalTangentPoints(
+  dLat: number, dLon: number,
+  cLat: number, cLon: number,
+  r: number,
+): [{ lat: number; lon: number }, { lat: number; lon: number }] {
+  const cosLat = Math.cos(dLat * Math.PI / 180)
+  const dxM = (cLon - dLon) * cosLat * 111320
+  const dyM = (cLat - dLat) * 111320
+  const d   = Math.sqrt(dxM * dxM + dyM * dyM)
+  if (d <= r) return [{ lat: cLat, lon: cLon }, { lat: cLat, lon: cLon }]
+  const theta = Math.atan2(dxM, dyM)
+  const alpha = Math.asin(Math.min(1, r / d))
+  const L     = Math.sqrt(Math.max(0, d * d - r * r))
+  const make  = (a: number) => ({
+    lat: dLat + L * Math.cos(a) / 111320,
+    lon: dLon + L * Math.sin(a) / (111320 * cosLat),
+  })
+  return [make(theta + alpha), make(theta - alpha)]
+}
+
 export function createMockTelemetryEmitter(
   onTelemetry: TelemetryCallback,
   onStatus: StatusCallback,
 ): () => void {
-  let orbitAngle = 0
-  let battery    = 98
+  let orbitAngle      = 0
+  let orbitCenterLat  = CENTER_LAT
+  let orbitCenterLon  = CENTER_LON
+  let wasInPathMode   = false
+  let battery         = 98
 
   // Path-following state
   let seenVersion  = -1
@@ -64,15 +87,26 @@ export function createMockTelemetryEmitter(
   onStatus('connected')
 
   const interval = setInterval(() => {
-    battery = Math.max(0, battery - 0.001)
+    battery = Math.max(0, battery - 0.001 * (TICK_MS / 100))
 
     const { path, version, windStrength } = demoState
     const speedMs = Math.max(1, demoState.speedMs)
 
     if (path.length > 1) {
+      wasInPathMode = true
       if (version !== seenVersion) {
-        seenVersion  = version
-        activePath   = [{ lat: curLat, lon: curLon }, ...path]
+        seenVersion = version
+        // Insert a tangent waypoint so the drone approaches the first loiter
+        // circle along the same tangent line shown on the map.
+        const fp = demoState.firstPoi
+        let approachPts: { lat: number; lon: number }[] = []
+        if (fp && path.length > 0) {
+          const [tp1, tp2] = externalTangentPoints(curLat, curLon, fp.lat, fp.lon, fp.loiter_radius)
+          const d1 = distM(tp1, path[0])
+          const d2 = distM(tp2, path[0])
+          approachPts = [d1 <= d2 ? tp1 : tp2]
+        }
+        activePath   = [{ lat: curLat, lon: curLon }, ...approachPts, ...path]
         activeLength = pathLength(activePath)
         traveledM    = 0
       }
@@ -118,12 +152,21 @@ export function createMockTelemetryEmitter(
         activePath  = []
       }
 
-      orbitAngle = (orbitAngle + (demoState.speedMs / 18) * 0.5) % 360
+      if (wasInPathMode) {
+        // Transition out of path mode: anchor orbit so initial position = current pos
+        const rlat = ORBIT_RADIUS_M / 111320
+        orbitCenterLat = curLat - rlat  // cos(0)=1, so pos at angle 0 = center + (rlat,0) = curLat
+        orbitCenterLon = curLon
+        orbitAngle     = 0
+        wasInPathMode  = false
+      }
+
+      orbitAngle = (orbitAngle + (demoState.speedMs / 18) * 0.5 * (TICK_MS / 100)) % 360
       const rad  = (orbitAngle * Math.PI) / 180
       const rlat = ORBIT_RADIUS_M / 111320
-      const rlon = ORBIT_RADIUS_M / (111320 * Math.cos(CENTER_LAT * Math.PI / 180))
-      curLat = CENTER_LAT + rlat * Math.cos(rad)
-      curLon = CENTER_LON + rlon * Math.sin(rad)
+      const rlon = ORBIT_RADIUS_M / (111320 * Math.cos(orbitCenterLat * Math.PI / 180))
+      curLat = orbitCenterLat + rlat * Math.cos(rad)
+      curLon = orbitCenterLon + rlon * Math.sin(rad)
 
       windAngle += (Math.random() - 0.5) * 15
       if (windStrength > 0) {

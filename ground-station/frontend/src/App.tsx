@@ -24,7 +24,7 @@ export default function App() {
           {pip === 'map' && (
             <div className="panel-pip-overlay" onClick={() => setPip('video')} />
           )}
-          <MapPanel />
+          <MapPanel isPip={pip === 'map'} />
         </div>
 
         {/* Video panel */}

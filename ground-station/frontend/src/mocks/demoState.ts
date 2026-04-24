@@ -7,9 +7,11 @@ export const demoState: {
   version: number
   speedMs: number
   windStrength: number
+  firstPoi: { lat: number; lon: number; loiter_radius: number } | null
 } = {
   path: [],
   version: 0,
   speedMs: 18,
   windStrength: 0,
+  firstPoi: null,
 }
