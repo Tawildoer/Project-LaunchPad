@@ -117,7 +117,6 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
   useEffect(() => {
     if (!telemetry || pois.length === 0) return
     const { lat, lon } = telemetry.position
-    const speed   = Math.max(telemetry.velocity.ground_speed, 1)
     const now     = Date.now()
     const entries = poiEntryRef.current
 
@@ -127,19 +126,13 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
       const nearby  = d <= poi.loiter_radius * 1.35
 
       if (entries[poi.id] !== undefined) {
-        if (entries[poi.id] === -1) {
-          if (!nearby) {
-            delete entries[poi.id]
-            removePoi(poi.id)
-            return
-          }
-        } else if (!nearby) {
+        if (!nearby && now - entries[poi.id] > 2000) {
           delete entries[poi.id]
-        } else {
-          const dwellNeeded = (Math.PI * poi.loiter_radius / speed) * 1000
-          if (now - entries[poi.id] >= dwellNeeded) {
-            entries[poi.id] = -1
-          }
+          removePoi(poi.id)
+          return
+        }
+        if (!nearby) {
+          delete entries[poi.id]
         }
       } else if (inside) {
         entries[poi.id] = now
