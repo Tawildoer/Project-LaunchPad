@@ -1,12 +1,14 @@
 export interface LatLon {
   lat: number
   lon: number
+  poiId?: string | null
 }
 
 export interface POIPath {
   lat: number
   lon: number
   loiter_radius: number
+  id?: string
 }
 
 /**
@@ -116,17 +118,19 @@ export function buildMissionPath(pois: POIPath[], arcMode: ArcMode = 'cw', entry
   const arcFn  = useLHS ? ccwArc : cwArc
   const loopDir = useLHS ? 1 : -1  // +1 = CCW (increasing angle), -1 = CW
 
+  const tag = (pts: LatLon[], poiId: string | null): LatLon[] =>
+    pts.map(p => ({ ...p, poiId }))
+
   if (pois.length === 1) {
     const c: LatLon = { lat: pois[0].lat, lon: pois[0].lon }
     const N = S * 2
     const startAngle = entryAngle !== undefined ? entryAngle : 90
     for (let k = 0; k <= N; k++) {
-      result.push(pointOnCircle(c, pois[0].loiter_radius, startAngle + loopDir * (360 * k) / N))
+      result.push({ ...pointOnCircle(c, pois[0].loiter_radius, startAngle + loopDir * (360 * k) / N), poiId: pois[0].id ?? null })
     }
     return result
   }
 
-  // Precompute tangent touch-point angles for each consecutive pair
   const tangAngles = pois.slice(0, -1).map((poi, i) =>
     tangFn(
       { lat: poi.lat, lon: poi.lon }, poi.loiter_radius,
@@ -136,13 +140,12 @@ export function buildMissionPath(pois: POIPath[], arcMode: ArcMode = 'cw', entry
 
   const c0: LatLon = { lat: pois[0].lat, lon: pois[0].lon }
   const firstArcStart = entryAngle !== undefined ? entryAngle : normDeg(tangAngles[0] + 180)
-  result.push(...arcFn(c0, pois[0].loiter_radius, firstArcStart, tangAngles[0], S))
+  result.push(...tag(arcFn(c0, pois[0].loiter_radius, firstArcStart, tangAngles[0], S), pois[0].id ?? null))
 
   for (let i = 1; i < pois.length; i++) {
     const center: LatLon = { lat: pois[i].lat, lon: pois[i].lon }
     const arrival = tangAngles[i - 1]
 
-    // Interpolate the tangent segment between circles
     const prev = result[result.length - 1]
     const next = pointOnCircle(center, pois[i].loiter_radius, arrival)
     const tangentLen = distanceMeters(prev, next)
@@ -150,17 +153,16 @@ export function buildMissionPath(pois: POIPath[], arcMode: ArcMode = 'cw', entry
     const steps = Math.max(1, Math.floor(tangentLen / SPACING))
     for (let s = 1; s < steps; s++) {
       const f = s / steps
-      result.push({ lat: prev.lat + f * (next.lat - prev.lat), lon: prev.lon + f * (next.lon - prev.lon) })
+      result.push({ lat: prev.lat + f * (next.lat - prev.lat), lon: prev.lon + f * (next.lon - prev.lon), poiId: null })
     }
 
     if (i === pois.length - 1) {
-      // Last circle: continuous full loop from the arrival tangent
       const N = S * 2
       for (let k = 0; k <= N; k++) {
-        result.push(pointOnCircle(center, pois[i].loiter_radius, arrival + loopDir * (360 * k) / N))
+        result.push({ ...pointOnCircle(center, pois[i].loiter_radius, arrival + loopDir * (360 * k) / N), poiId: pois[i].id ?? null })
       }
     } else {
-      result.push(...arcFn(center, pois[i].loiter_radius, arrival, tangAngles[i], S))
+      result.push(...tag(arcFn(center, pois[i].loiter_radius, arrival, tangAngles[i], S), pois[i].id ?? null))
     }
   }
 

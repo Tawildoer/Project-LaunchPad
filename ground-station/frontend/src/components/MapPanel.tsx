@@ -84,7 +84,7 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
   const droneRef        = useRef<{ lat: number; lon: number } | null>(null)
   const animFrameRef    = useRef<number | null>(null)
   const followTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const poiEntryRef     = useRef<Record<string, number>>({})
+  const lastPoiIdRef    = useRef<string | null>(null)
   const trailRef        = useRef<{ lat: number; lon: number }[]>([])
   const trailSnapshotRef = useRef<{ lat: number; lon: number }[]>([])
   const trailCountRef   = useRef(0)
@@ -113,32 +113,6 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
       trailSnapshotRef.current = [...trail]
     }
   }, [telemetry?.position.lat, telemetry?.position.lon])
-
-  useEffect(() => {
-    if (!telemetry || pois.length === 0) return
-    const { lat, lon } = telemetry.position
-    const now     = Date.now()
-    const entries = poiEntryRef.current
-
-    for (const poi of pois) {
-      const d       = distMeters(lat, lon, poi.lat, poi.lon)
-      const inside  = d <= poi.loiter_radius * 1.15
-      const nearby  = d <= poi.loiter_radius * 1.35
-
-      if (entries[poi.id] !== undefined) {
-        if (!nearby && now - entries[poi.id] > 2000) {
-          delete entries[poi.id]
-          removePoi(poi.id)
-          return
-        }
-        if (!nearby) {
-          delete entries[poi.id]
-        }
-      } else if (inside) {
-        entries[poi.id] = now
-      }
-    }
-  }, [telemetry?.position.lat, telemetry?.position.lon, pois, removePoi])
 
   const followTick = useCallback(() => {
     if (!followingRef.current) { animFrameRef.current = null; return }
@@ -317,6 +291,18 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
     }
     return [proj, ...path.slice(bestSeg + 1)]
   }, [telemetry?.position.lat, telemetry?.position.lon, path])
+
+  // Remove POI when the drone's path progress moves past its arc onto a tangent or next POI
+  useEffect(() => {
+    if (path.length === 0) return
+    const seg = Math.min(pathProgressRef.current, path.length - 1)
+    const currentPoiId = path[seg].poiId ?? null
+    const prevPoiId = lastPoiIdRef.current
+    if (prevPoiId && currentPoiId !== prevPoiId) {
+      removePoi(prevPoiId)
+    }
+    lastPoiIdRef.current = currentPoiId
+  }, [telemetry?.position.lat, telemetry?.position.lon, path, removePoi])
 
   const pathGeoJson = useMemo(() => ({
     type: 'FeatureCollection' as const,
