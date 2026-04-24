@@ -5,6 +5,7 @@ import MapPanel from './components/MapPanel'
 import VideoPanel from './components/VideoPanel'
 import CopilotBar from './components/CopilotBar'
 import SettingsPanel from './components/SettingsPanel'
+import DemoController from './components/DemoController'
 
 type PipPanel = 'map' | 'video'
 
@@ -35,6 +36,7 @@ export default function App() {
         </div>
       </div>
 
+      <DemoController />
       <CommandBar />
       <CopilotBar />
     </div>
