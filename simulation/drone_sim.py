@@ -173,24 +173,9 @@ class DroneState:
         elif cmd_type == "disarm":
             self.armed = False
         elif cmd_type == "send_mission":
-            new_path = cmd.get("path", [])
-            new_pois = cmd.get("pois", [])
-            if new_path and self.mission_path:
-                # Find the closest point in the new path to continue from
-                best_i = 0
-                best_d = float("inf")
-                for i, pt in enumerate(new_path):
-                    d = dist_m(self.lat, self.lon, pt["lat"], pt["lon"])
-                    if d < best_d:
-                        best_d = d
-                        best_i = i
-                self.mission_path = new_path
-                self.pois = new_pois
-                self.path_index = best_i
-            else:
-                self.mission_path = new_path
-                self.pois = new_pois
-                self.path_index = 0
+            self.mission_path = cmd.get("path", [])
+            self.pois = cmd.get("pois", [])
+            self.path_index = 0
             if self.armed and self.mission_path:
                 self.mode = "AUTO"
         elif cmd_type == "set_mode":
