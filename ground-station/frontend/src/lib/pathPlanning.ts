@@ -109,7 +109,7 @@ export function approachEntryAngle(
 export function buildMissionPath(pois: POIPath[], arcMode: ArcMode = 'cw', entryAngle?: number): LatLon[] {
   if (pois.length === 0) return []
 
-  const S = 32  // arc samples
+  const S = 64  // arc samples
   const result: LatLon[] = []
   const useLHS = arcMode === 'ccw' || arcMode === 'long'
   const tangFn = useLHS ? lhsTangentAngle : rhsTangentAngle
