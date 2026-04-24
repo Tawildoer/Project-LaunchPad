@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from 'react'
 import StatusHeader from './components/StatusHeader'
 import CommandBar from './components/CommandBar'
 import MapPanel from './components/MapPanel'
+import VideoPanel from './components/VideoPanel'
 
 export default function App() {
   const [leftPct, setLeftPct] = useState(50)
@@ -40,7 +41,7 @@ export default function App() {
           onMouseDown={onMouseDown}
         />
         <div className="panel" style={{ flex: 1 }}>
-          VIDEO PANEL
+          <VideoPanel />
         </div>
       </div>
       <CommandBar />

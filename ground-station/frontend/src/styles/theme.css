@@ -129,3 +129,44 @@ input[type="text"]:focus, input[type="number"]:focus {
   background: var(--green-faint);
   border-color: var(--green);
 }
+
+.video-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #060807;
+  position: relative;
+}
+
+.no-signal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--green-dim);
+  font-size: var(--text-sm);
+  letter-spacing: 0.12em;
+}
+
+.no-signal-dots span {
+  animation: blink 1.4s infinite;
+}
+
+.no-signal-dots span:nth-child(2) { animation-delay: 0.2s; }
+.no-signal-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes blink {
+  0%, 80%, 100% { opacity: 0; }
+  40%            { opacity: 1; }
+}
+
+.gimbal-label {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  font-size: var(--text-sm);
+  color: var(--green-dim);
+  letter-spacing: 0.08em;
+}
