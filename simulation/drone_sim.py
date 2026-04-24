@@ -149,7 +149,7 @@ class DroneState:
 
         # Walk lookahead forward from the drone's projection, not segment start
         d_to_target = dist_m(self.lat, self.lon, curr["lat"], curr["lon"])
-        lookahead_m = max(self.speed * 1.0, d_to_target * 0.5)
+        lookahead_m = max(self.speed * 0.3, d_to_target * 0.8)
         remaining_on_seg = seg_len * (1.0 - t)
         dist_left = lookahead_m
 
