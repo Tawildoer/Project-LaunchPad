@@ -462,6 +462,7 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
           )}
           {pois.length > 0 && <button onClick={handleClearPath}>CLEAR PATH</button>}
           <button onClick={handleTestPath}>TEST PATH</button>
+          <button onClick={() => { clearPois(); trailRef.current = []; trailSnapshotRef.current = []; send({ type: 'command', payload: { type: 'reset' } }) }}>RESET SIM</button>
         </div>
       )}
 

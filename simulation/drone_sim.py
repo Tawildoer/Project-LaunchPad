@@ -204,6 +204,16 @@ class DroneState:
             self.mode = cmd.get("mode", self.mode)
         elif cmd_type == "return_home":
             self.mode = "RTL"
+        elif cmd_type == "reset":
+            self.lat = self.home_lat
+            self.lon = self.home_lon
+            self.heading = 0.0
+            self.battery = 98.0
+            self.armed = True
+            self.mode = "STABILIZE"
+            self.pois = []
+            self.mission_path = []
+            self.path_index = 0
             self.loiter_start = None
 
 
