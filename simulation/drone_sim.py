@@ -38,8 +38,8 @@ class DroneState:
         self,
         lat: float = -37.854,
         lon: float = 145.059,
-        speed: float = 18.0,
-        wind_speed: float = 3.0,
+        speed: float = 40.0,
+        wind_speed: float = 2.0,
         min_turn_radius: float = 80.0,
     ):
         self.lat = lat
@@ -83,7 +83,7 @@ class DroneState:
             if dist_m(self.lat, self.lon, self.home_lat, self.home_lon) < 10:
                 self.mode = "LOITER"
 
-        self.heading = (self.heading + (random.random() - 0.5) * 3) % 360
+        self.heading = (self.heading + (random.random() - 0.5) * 0.5) % 360
 
         move_m = self.speed * dt
         rad = math.radians(self.heading)
@@ -246,8 +246,8 @@ def main() -> None:
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--lat", type=float, default=-37.854)
     parser.add_argument("--lon", type=float, default=145.059)
-    parser.add_argument("--speed", type=float, default=18.0)
-    parser.add_argument("--wind", type=float, default=3.0)
+    parser.add_argument("--speed", type=float, default=40.0)
+    parser.add_argument("--wind", type=float, default=2.0)
     parser.add_argument("--turn-radius", type=float, default=80.0)
     parser.add_argument("--armed", action="store_true", help="Start drone pre-armed")
     args = parser.parse_args()
