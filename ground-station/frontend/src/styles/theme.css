@@ -170,3 +170,50 @@ input[type="text"]:focus, input[type="number"]:focus {
   color: var(--green-dim);
   letter-spacing: 0.08em;
 }
+
+.copilot-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-top: 1px solid var(--border);
+  height: 100%;
+  font-size: var(--text-sm);
+}
+
+.copilot-prefix {
+  color: var(--green-dim);
+  user-select: none;
+}
+
+.copilot-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  caret-color: var(--green);
+  color: var(--green);
+  font-family: var(--font);
+  font-size: var(--text-sm);
+  outline: none;
+}
+
+.copilot-response {
+  position: absolute;
+  bottom: 52px;
+  left: 0;
+  right: 0;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border);
+  padding: 8px 12px;
+  font-size: var(--text-sm);
+  max-height: 120px;
+  overflow-y: auto;
+  z-index: 100;
+}
+
+.copilot-confirmation {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+}

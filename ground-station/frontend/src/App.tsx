@@ -3,6 +3,7 @@ import StatusHeader from './components/StatusHeader'
 import CommandBar from './components/CommandBar'
 import MapPanel from './components/MapPanel'
 import VideoPanel from './components/VideoPanel'
+import CopilotBar from './components/CopilotBar'
 
 export default function App() {
   const [leftPct, setLeftPct] = useState(50)
@@ -46,7 +47,7 @@ export default function App() {
       </div>
       <CommandBar />
       <div style={{ borderTop: '1px solid var(--border)', padding: '0 12px', display: 'flex', alignItems: 'center' }}>
-        COPILOT BAR
+        <CopilotBar />
       </div>
     </div>
   )
