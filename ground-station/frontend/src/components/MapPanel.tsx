@@ -89,9 +89,11 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
   const trailRef        = useRef<{ lat: number; lon: number }[]>([])
   const trailSnapshotRef = useRef<{ lat: number; lon: number }[]>([])
   const trailCountRef   = useRef(0)
-  const pathProgressRef = useRef(0)
   const pathJoinedRef   = useRef(false)
   const frozenPathRef   = useRef<{ lat: number; lon: number; poiId?: string | null }[]>([])
+  const distTraveledRef = useRef(0)
+  const prevDronePosRef = useRef<{ lat: number; lon: number } | null>(null)
+  const currentSegRef   = useRef(0)
 
   const initialLat = telemetry?.position.lat ?? DEFAULT_LAT
   const initialLon = telemetry?.position.lon ?? DEFAULT_LON
@@ -241,21 +243,25 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
   // are ignored — drone finishes its current path first.
   useEffect(() => {
     if (pois.length === 0) {
-      pathProgressRef.current = 0
       pathJoinedRef.current = false
       frozenPathRef.current = []
+      distTraveledRef.current = 0
+      prevDronePosRef.current = null
+      currentSegRef.current = 0
       lastPoiIdRef.current = null
     } else if (pois.length > prevPoiCountRef.current && !pathJoinedRef.current) {
-      pathProgressRef.current = 0
       frozenPathRef.current = []
+      distTraveledRef.current = 0
+      prevDronePosRef.current = null
+      currentSegRef.current = 0
       lastPoiIdRef.current = null
     }
     prevPoiCountRef.current = pois.length
   }, [pois])
 
-  // Path consumption: freeze the path at join time, then consume with
-  // strict sequential advancement (t >= 1.0 per segment). No searching
-  // ahead — segments are all short (10-15m) so this works reliably.
+  // Path consumption: freeze the path at join time, then consume based
+  // on cumulative distance traveled. Position-independent — can't be
+  // fooled by lateral offset, path crossings, or arc geometry.
   const remainingPath = useMemo(() => {
     if (!telemetry || path.length < 2) return path
     const { lat, lon } = telemetry.position
@@ -265,7 +271,8 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
       if (distMeters(lat, lon, path[0].lat, path[0].lon) <= 80) {
         pathJoinedRef.current = true
         frozenPathRef.current = [...path]
-        pathProgressRef.current = 0
+        distTraveledRef.current = 0
+        prevDronePosRef.current = { lat, lon }
       } else {
         return path
       }
@@ -274,45 +281,46 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
     const fp = frozenPathRef.current
     if (fp.length < 2) return path
 
-    // Strict sequential advancement: only advance when the drone has
-    // passed the END of the current segment (t >= 1.0). Up to 5 per
-    // tick for high-speed flight. Never skips ahead.
-    let seg = pathProgressRef.current
-    const cosLat = Math.cos(lat * Math.PI / 180)
-    let lastT = 0
-    let steps = 0
+    // Accumulate distance traveled since joining
+    if (prevDronePosRef.current) {
+      distTraveledRef.current += distMeters(
+        lat, lon, prevDronePosRef.current.lat, prevDronePosRef.current.lon,
+      )
+    }
+    prevDronePosRef.current = { lat, lon }
 
-    while (seg < fp.length - 1 && steps < 5) {
-      const p0 = fp[seg], p1 = fp[seg + 1]
-      const ex = (p1.lon - p0.lon) * cosLat * 111320
-      const ey = (p1.lat - p0.lat) * 111320
-      const fx = (lon - p0.lon) * cosLat * 111320
-      const fy = (lat - p0.lat) * 111320
-      const segLen2 = ex * ex + ey * ey
-      if (segLen2 < 0.01) { seg++; steps++; continue }
-      lastT = (fx * ex + fy * ey) / segLen2
-      if (lastT >= 1.0) { seg++; steps++ }
-      else break
+    // Walk the traveled distance along the frozen path
+    const traveled = distTraveledRef.current
+    let acc = 0
+    let seg = 0
+    let frac = 0
+
+    for (let i = 0; i < fp.length - 1; i++) {
+      const segLen = distMeters(fp[i].lat, fp[i].lon, fp[i + 1].lat, fp[i + 1].lon)
+      if (acc + segLen >= traveled) {
+        seg = i
+        frac = segLen > 0 ? (traveled - acc) / segLen : 0
+        break
+      }
+      acc += segLen
+      if (i === fp.length - 2) { seg = fp.length - 1; frac = 0 }
     }
 
-    pathProgressRef.current = seg
-
+    currentSegRef.current = seg
     if (seg >= fp.length - 1) return fp.slice(-1)
 
-    const tClamped = Math.max(0, Math.min(1, lastT))
     const p0 = fp[seg], p1 = fp[seg + 1]
     const proj = {
-      lat: p0.lat + tClamped * (p1.lat - p0.lat),
-      lon: p0.lon + tClamped * (p1.lon - p0.lon),
+      lat: p0.lat + frac * (p1.lat - p0.lat),
+      lon: p0.lon + frac * (p1.lon - p0.lon),
     }
 
-    // Check if new POIs were added after the frozen path was created
+    // Append live path extension for any POIs added after freeze
     const frozenPoiIds = new Set<string>()
     for (const p of fp) { if (p.poiId) frozenPoiIds.add(p.poiId as string) }
     let extension: typeof path = []
     for (let i = 0; i < path.length; i++) {
       if (path[i].poiId && !frozenPoiIds.has(path[i].poiId as string)) {
-        // Include tangent points leading to the new POI
         let start = i
         while (start > 0 && !path[start - 1].poiId) start--
         extension = path.slice(start)
@@ -327,7 +335,7 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
   useEffect(() => {
     const fp = frozenPathRef.current
     if (fp.length === 0) return
-    const seg = Math.min(pathProgressRef.current, fp.length - 1)
+    const seg = Math.min(currentSegRef.current, fp.length - 1)
     const currentPoiId = fp[seg].poiId ?? null
     const prevPoiId = lastPoiIdRef.current
     if (prevPoiId && currentPoiId !== prevPoiId) {
