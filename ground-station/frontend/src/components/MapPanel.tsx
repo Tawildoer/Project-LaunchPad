@@ -248,9 +248,14 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
   const pathRef = useRef(path)
   pathRef.current = path
 
-  // Send mission + path to backend/sim when POIs change
+  // Send mission to backend/sim only when POIs are added (not removed/completed)
+  const prevSendCountRef = useRef(0)
   useEffect(() => {
-    if (pois.length === 0) return
+    if (pois.length === 0 || pois.length <= prevSendCountRef.current) {
+      prevSendCountRef.current = pois.length
+      return
+    }
+    prevSendCountRef.current = pois.length
     send({
       type: 'command',
       payload: {
