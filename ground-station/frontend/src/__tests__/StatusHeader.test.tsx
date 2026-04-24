@@ -16,9 +16,8 @@ describe('StatusHeader', () => {
     expect(screen.getByText('PROJECT LAUNCHPAD')).toBeInTheDocument()
   })
 
-  it('shows demo mode when no backend is configured', () => {
+  it('shows connection status', () => {
     render(<StatusHeader />)
-    // In test environment, VITE_WS_URL is not set, so DEMO mode is shown
-    expect(screen.getByText('DEMO')).toBeInTheDocument()
+    expect(screen.getByText('CONNECTED')).toBeInTheDocument()
   })
 })

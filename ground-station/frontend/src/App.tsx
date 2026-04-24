@@ -5,7 +5,6 @@ import MapPanel from './components/MapPanel'
 import VideoPanel from './components/VideoPanel'
 import CopilotBar from './components/CopilotBar'
 import SettingsPanel from './components/SettingsPanel'
-import DemoController from './components/DemoController'
 
 type PipPanel = 'map' | 'video'
 
@@ -19,7 +18,6 @@ export default function App() {
       <SettingsPanel open={settingsOpen} />
 
       <div className="panels">
-        {/* Map panel */}
         <div className={pip === 'map' ? 'panel-pip' : 'panel-main'}>
           {pip === 'map' && (
             <div className="panel-pip-overlay" onClick={() => setPip('video')} />
@@ -27,7 +25,6 @@ export default function App() {
           <MapPanel isPip={pip === 'map'} />
         </div>
 
-        {/* Video panel */}
         <div className={pip === 'video' ? 'panel-pip' : 'panel-main'}>
           {pip === 'video' && (
             <div className="panel-pip-overlay" onClick={() => setPip('map')} />
@@ -36,7 +33,6 @@ export default function App() {
         </div>
       </div>
 
-      <DemoController />
       <CommandBar />
       <CopilotBar />
     </div>

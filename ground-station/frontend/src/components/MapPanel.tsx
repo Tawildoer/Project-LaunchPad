@@ -6,10 +6,6 @@ import { useTelemetry } from '../store/TelemetryContext'
 import { useMission } from '../store/MissionContext'
 import { useSettings } from '../store/SettingsContext'
 import { buildMissionPath, approachEntryAngle } from '../lib/pathPlanning'
-import { demoState } from '../mocks/demoState'
-import DemoToolbar from './DemoToolbar'
-
-const DEMO_MODE = !import.meta.env.VITE_WS_URL
 
 const DEFAULT_LAT = -37.854
 const DEFAULT_LON = 145.059
@@ -88,10 +84,11 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
   const droneRef        = useRef<{ lat: number; lon: number } | null>(null)
   const animFrameRef    = useRef<number | null>(null)
   const followTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // POI dwell tracking — records timestamp when drone first entered each loiter circle
   const poiEntryRef     = useRef<Record<string, number>>({})
-  // Historical trail — all positions the drone has visited this session
   const trailRef        = useRef<{ lat: number; lon: number }[]>([])
+  const pathProgressRef = useRef(0)
+  const pathJoinedRef   = useRef(false)
+  const consumptionPathRef = useRef<{ lat: number; lon: number }[]>([])
 
   const initialLat = telemetry?.position.lat ?? DEFAULT_LAT
   const initialLon = telemetry?.position.lon ?? DEFAULT_LON
@@ -100,12 +97,10 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
     mapRef.current?.getMap().setProjection({ type: 'globe' })
   }, [])
 
-  // Keep droneRef current for the rAF loop
   useEffect(() => {
     if (telemetry) droneRef.current = { lat: telemetry.position.lat, lon: telemetry.position.lon }
   }, [telemetry?.position.lat, telemetry?.position.lon])
 
-  // Accumulate trail positions; cap at 10 000 points (~5.5 min at 30 fps)
   useEffect(() => {
     if (!telemetry) return
     const { lat, lon } = telemetry.position
@@ -114,9 +109,6 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
     if (trail.length > 10000) trail.splice(0, trail.length - 10000)
   }, [telemetry?.position.lat, telemetry?.position.lon])
 
-  // POI completion: remove a POI after the drone has dwelt inside its loiter circle
-  // for roughly half a loiter orbit (π·r / speed). Once the dwell timer starts, a
-  // 25% grace zone prevents wind-drift from resetting it on a brief excursion.
   useEffect(() => {
     if (!telemetry || pois.length === 0) return
     const { lat, lon } = telemetry.position
@@ -131,7 +123,6 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
 
       if (entries[poi.id] !== undefined) {
         if (entries[poi.id] === -1) {
-          // Dwell complete — waiting for drone to leave
           if (!nearby) {
             delete entries[poi.id]
             removePoi(poi.id)
@@ -142,7 +133,7 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
         } else {
           const dwellNeeded = (Math.PI * poi.loiter_radius / speed) * 1000
           if (now - entries[poi.id] >= dwellNeeded) {
-            entries[poi.id] = -1  // mark dwell complete, wait for exit
+            entries[poi.id] = -1
           }
         }
       } else if (inside) {
@@ -151,7 +142,6 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
     }
   }, [telemetry?.position.lat, telemetry?.position.lon, pois, removePoi])
 
-  // Spring follow rAF loop
   const followTick = useCallback(() => {
     if (!followingRef.current) { animFrameRef.current = null; return }
     const map   = mapRef.current?.getMap()
@@ -220,34 +210,66 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
     [pois, effectiveArcMode, entryAngle],
   )
 
-  // Distance-based path consumption: the mock tracks exactly how far the
-  // drone has traveled along the mission path (demoState.pathDistanceM).
-  // We walk that distance along demoState.path to find the consumption point.
+  useEffect(() => {
+    pathProgressRef.current = 0
+    pathJoinedRef.current = false
+    consumptionPathRef.current = []
+  }, [pois, effectiveArcMode])
+
   const remainingPath = useMemo(() => {
     if (!telemetry || path.length < 2) return path
-    if (!DEMO_MODE) return path
+    const { lat, lon } = telemetry.position
 
-    const progressM = demoState.pathDistanceM
-    if (progressM <= 0) return path
-
-    const cPath = demoState.activeMissionPath
-    if (cPath.length < 2) return path
-
-    let acc = 0
-    for (let i = 0; i < cPath.length - 1; i++) {
-      const segLen = distMeters(cPath[i].lat, cPath[i].lon, cPath[i + 1].lat, cPath[i + 1].lon)
-      if (acc + segLen >= progressM) {
-        const frac = segLen > 0 ? (progressM - acc) / segLen : 0
-        const proj = {
-          lat: cPath[i].lat + frac * (cPath[i + 1].lat - cPath[i].lat),
-          lon: cPath[i].lon + frac * (cPath[i + 1].lon - cPath[i].lon),
-        }
-        return [proj, ...cPath.slice(i + 1)]
+    if (!pathJoinedRef.current) {
+      if (distMeters(lat, lon, path[0].lat, path[0].lon) <= 80) {
+        pathJoinedRef.current = true
+        consumptionPathRef.current = [...path]
+        pathProgressRef.current = 0
       }
-      acc += segLen
     }
 
-    return cPath.slice(cPath.length - 1)
+    if (!pathJoinedRef.current) return path
+
+    const cPath = consumptionPathRef.current
+    if (cPath.length < 2) return path
+
+    if (pathProgressRef.current >= cPath.length - 1) {
+      return cPath.slice(cPath.length - 1)
+    }
+
+    let seg = pathProgressRef.current
+    let lastT = 0
+
+    while (seg < cPath.length - 1) {
+      const p0 = cPath[seg], p1 = cPath[seg + 1]
+      const cosLat = Math.cos(lat * Math.PI / 180)
+      const ex = (p1.lon - p0.lon) * cosLat * 111320
+      const ey = (p1.lat - p0.lat) * 111320
+      const segLen2 = ex * ex + ey * ey
+      if (segLen2 < 0.01) { seg++; continue }
+      const fx = (lon - p0.lon) * cosLat * 111320
+      const fy = (lat - p0.lat) * 111320
+      lastT = (fx * ex + fy * ey) / segLen2
+      if (lastT >= 1.0) {
+        seg++
+      } else {
+        break
+      }
+    }
+
+    pathProgressRef.current = seg
+
+    if (seg >= cPath.length - 1) {
+      return cPath.slice(cPath.length - 1)
+    }
+
+    const tClamped = Math.max(0, Math.min(1, lastT))
+    const p0 = cPath[seg], p1 = cPath[seg + 1]
+    const proj = {
+      lat: p0.lat + tClamped * (p1.lat - p0.lat),
+      lon: p0.lon + tClamped * (p1.lon - p0.lon),
+    }
+    return [proj, ...cPath.slice(seg + 1)]
   }, [telemetry?.position.lat, telemetry?.position.lon, path, pois])
 
   const pathGeoJson = useMemo(() => ({
@@ -259,7 +281,6 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
     }] : [],
   }), [remainingPath])
 
-  // Historical trail rendered every telemetry tick by reading the ref directly
   const trailGeoJson = useMemo(() => {
     const trail = trailRef.current
     if (trail.length < 2) return { type: 'FeatureCollection' as const, features: [] }
@@ -274,9 +295,7 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
   }, [telemetry?.position.lat, telemetry?.position.lon])
 
   const approachGeoJson = useMemo(() => {
-    if (!telemetry || pois.length < 1 || path.length < 1)
-      return { type: 'FeatureCollection' as const, features: [] }
-    if (DEMO_MODE && demoState.pathDistanceM > 0)
+    if (!telemetry || pois.length < 1 || path.length < 1 || pathJoinedRef.current)
       return { type: 'FeatureCollection' as const, features: [] }
     const drone = telemetry.position
     return {
@@ -315,13 +334,11 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
       >
         <NavigationControl position="bottom-left" showCompass={false} />
 
-        {/* Historical trail */}
         <Source id="trail" type="geojson" data={trailGeoJson}>
           <Layer id="trail-line" type="line"
             paint={{ 'line-color': '#666', 'line-width': 1.5, 'line-opacity': 0.55, 'line-dasharray': [2, 4] }} />
         </Source>
 
-        {/* Dashed approach line: drone → tangent point on first loiter circle */}
         <Source id="approach" type="geojson" data={approachGeoJson}>
           <Layer id="approach-line" type="line"
             paint={{ 'line-color': '#555', 'line-width': 1.5, 'line-opacity': 0.7, 'line-dasharray': [4, 4] }} />
@@ -379,8 +396,6 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
         <button className={tileLayer === 'satellite' ? 'active' : ''} onClick={() => setTileLayer('satellite')}>SAT</button>
         <button className={tileLayer === 'vector' ? 'active' : ''} onClick={() => setTileLayer('vector')}>VEC</button>
       </div>
-
-      {DEMO_MODE && <DemoToolbar />}
     </div>
   )
 }

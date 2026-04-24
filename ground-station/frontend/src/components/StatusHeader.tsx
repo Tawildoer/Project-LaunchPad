@@ -8,8 +8,6 @@ const STATUS_COLOURS: Record<ConnectionStatus, string> = {
   disconnected: 'var(--red)',
 }
 
-const DEMO_MODE = !import.meta.env.VITE_WS_URL
-
 function Clock() {
   const [time, setTime] = useState(() => new Date().toTimeString().slice(0, 8))
   useEffect(() => {
@@ -39,8 +37,8 @@ export default function StatusHeader({ onSettingsToggle }: Props) {
       gap: 12,
     }}>
       <span style={{ flex: 1 }}>▌ <span>PROJECT LAUNCHPAD</span></span>
-      <span style={{ color: DEMO_MODE ? 'var(--fg-dim)' : STATUS_COLOURS[connectionStatus] }}>
-        ● <span>{DEMO_MODE ? 'DEMO' : connectionStatus.toUpperCase()}</span>
+      <span style={{ color: STATUS_COLOURS[connectionStatus] }}>
+        ● <span>{connectionStatus.toUpperCase()}</span>
       </span>
       <Clock />
       <button onClick={onSettingsToggle} style={{ letterSpacing: '0.08em' }}>⚙ SETTINGS</button>
