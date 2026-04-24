@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from 'react'
 import StatusHeader from './components/StatusHeader'
+import CommandBar from './components/CommandBar'
 
 export default function App() {
   const [leftPct, setLeftPct] = useState(50)
@@ -41,9 +42,7 @@ export default function App() {
           VIDEO PANEL
         </div>
       </div>
-      <div style={{ borderTop: '1px solid var(--border)', padding: '0 12px', display: 'flex', alignItems: 'center' }}>
-        COMMAND BAR
-      </div>
+      <CommandBar />
       <div style={{ borderTop: '1px solid var(--border)', padding: '0 12px', display: 'flex', alignItems: 'center' }}>
         COPILOT BAR
       </div>
