@@ -107,20 +107,23 @@ class DroneState:
             self.mode = "LOITER"
             return
 
-        # Advance when drone is within threshold of current target point
-        while self.path_index < len(self.mission_path) - 1:
-            pt = self.mission_path[self.path_index]
-            if dist_m(self.lat, self.lon, pt["lat"], pt["lon"]) < 50:
+        # Advance one point per tick when closer to next point than current
+        if self.path_index < len(self.mission_path) - 1:
+            d_curr = dist_m(self.lat, self.lon,
+                            self.mission_path[self.path_index]["lat"],
+                            self.mission_path[self.path_index]["lon"])
+            d_next = dist_m(self.lat, self.lon,
+                            self.mission_path[self.path_index + 1]["lat"],
+                            self.mission_path[self.path_index + 1]["lon"])
+            if d_next < d_curr:
                 self.path_index += 1
-            else:
-                break
 
         if self.path_index >= len(self.mission_path):
             self.mode = "LOITER"
             return
 
-        # Pure pursuit: steer toward a point lookahead_m ahead on the path
-        lookahead_m = self.min_turn_radius * 0.6
+        # Pure pursuit with tight lookahead for circle tracking
+        lookahead_m = self.min_turn_radius * 0.2
 
         # Walk forward from current index by lookahead distance
         dist_left = lookahead_m
