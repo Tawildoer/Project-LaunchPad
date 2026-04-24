@@ -306,15 +306,21 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
       lon: p0.lon + tClamped * (p1.lon - p0.lon),
     }
 
-    // Render from the LIVE path (includes new POIs) by finding the
-    // closest point on it to the consumption position
-    let liveSeg = 0
-    let liveMinD = Infinity
-    for (let i = 0; i < path.length - 1; i++) {
-      const d = distMeters(proj.lat, proj.lon, path[i].lat, path[i].lon)
-      if (d < liveMinD) { liveMinD = d; liveSeg = i }
+    // Check if new POIs were added after the frozen path was created
+    const frozenPoiIds = new Set<string>()
+    for (const p of fp) { if (p.poiId) frozenPoiIds.add(p.poiId as string) }
+    let extension: typeof path = []
+    for (let i = 0; i < path.length; i++) {
+      if (path[i].poiId && !frozenPoiIds.has(path[i].poiId as string)) {
+        // Include tangent points leading to the new POI
+        let start = i
+        while (start > 0 && !path[start - 1].poiId) start--
+        extension = path.slice(start)
+        break
+      }
     }
-    return [proj, ...path.slice(liveSeg + 1)]
+
+    return [proj, ...fp.slice(seg + 1), ...extension]
   }, [telemetry?.position.lat, telemetry?.position.lon, path])
 
   // Remove POI when progress moves past its arc onto tangent/next POI
