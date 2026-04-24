@@ -151,16 +151,25 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
     if (followTimeoutRef.current !== null) clearTimeout(followTimeoutRef.current)
   }, [])
 
-  const handleClearPath = useCallback(() => {
-    clearPois()
+  const resetConsumption = useCallback(() => {
+    pathJoinedRef.current = false
+    frozenPathRef.current = []
+    distTraveledRef.current = 0
+    prevDronePosRef.current = null
+    currentSegRef.current = 0
+    lastPoiIdRef.current = null
     trailRef.current = []
     trailSnapshotRef.current = []
-  }, [clearPois])
+  }, [])
+
+  const handleClearPath = useCallback(() => {
+    resetConsumption()
+    clearPois()
+  }, [clearPois, resetConsumption])
 
   const handleTestPath = useCallback(() => {
+    resetConsumption()
     clearPois()
-    trailRef.current = []
-    trailSnapshotRef.current = []
     const base = telemetry
       ? { lat: telemetry.position.lat, lon: telemetry.position.lon }
       : { lat: DEFAULT_LAT, lon: DEFAULT_LON }
@@ -217,14 +226,9 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
   const pathRef = useRef(path)
   pathRef.current = path
 
-  // Send mission to backend/sim when POIs are added
-  const prevSendCountRef = useRef(0)
+  // Send mission to sim when POIs exist and drone hasn't started flying
   useEffect(() => {
-    if (pois.length === 0 || pois.length <= prevSendCountRef.current) {
-      prevSendCountRef.current = pois.length
-      return
-    }
-    prevSendCountRef.current = pois.length
+    if (pois.length === 0 || pathJoinedRef.current) return
     send({
       type: 'command',
       payload: {
@@ -477,7 +481,7 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
           )}
           {pois.length > 0 && <button onClick={handleClearPath}>CLEAR PATH</button>}
           <button onClick={handleTestPath}>TEST PATH</button>
-          <button onClick={() => { clearPois(); trailRef.current = []; trailSnapshotRef.current = []; send({ type: 'command', payload: { type: 'reset' } }) }}>RESET SIM</button>
+          <button onClick={() => { resetConsumption(); clearPois(); send({ type: 'command', payload: { type: 'reset' } }) }}>RESET SIM</button>
         </div>
       )}
 
