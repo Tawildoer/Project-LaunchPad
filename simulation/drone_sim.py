@@ -63,8 +63,11 @@ class DroneState:
         self.pois: list[dict] = []
         self.mission_path: list[dict] = []
         self.path_index = 0
+        self._tick_count = 0
+        self._last_mode = "STABILIZE"
 
     def tick(self, dt: float) -> None:
+        self._tick_count += 1
         self.battery = max(0.0, self.battery - 0.0003 * dt)
 
         self.wind_angle = (self.wind_angle + (random.random() - 0.5) * 5) % 360
@@ -81,6 +84,13 @@ class DroneState:
             self._steer_toward(self.home_lat, self.home_lon, dt)
             if dist_m(self.lat, self.lon, self.home_lat, self.home_lon) < 10:
                 self.mode = "LOITER"
+
+        if self.mode != self._last_mode:
+            self._log(f"MODE {self._last_mode} → {self.mode}")
+            self._last_mode = self.mode
+
+        if self._tick_count % 150 == 0 and self.armed:
+            self._log_status()
 
         self.heading = (self.heading + (random.random() - 0.5) * 0.5) % 360
 
@@ -214,24 +224,49 @@ class DroneState:
             "gps": {"fix_type": 3, "satellites_visible": 12},
         }
 
+    def _log(self, msg: str) -> None:
+        ts = time.strftime("%H:%M:%S")
+        print(f"[{ts}] {msg}")
+
+    def _log_status(self) -> None:
+        poi_info = ""
+        if self.pois:
+            poi_ids = [p.get("id", "?") for p in self.pois]
+            poi_info = f"  POIs: {', '.join(poi_ids)}"
+        self._log(
+            f"MODE={self.mode}  HDG={self.heading:.0f}°  SPD={self.speed:.0f}m/s  "
+            f"BAT={self.battery:.0f}%  PATH={self.path_index}/{len(self.mission_path)}"
+            f"{poi_info}"
+        )
+
     def handle_command(self, cmd: dict) -> None:
         cmd_type = cmd.get("type")
         if cmd_type == "arm":
             self.armed = True
             self.mode = "AUTO" if self.mission_path else "STABILIZE"
+            self._log(f"CMD arm → mode={self.mode}")
         elif cmd_type == "disarm":
             self.armed = False
+            self._log("CMD disarm")
         elif cmd_type == "send_mission":
-            new_path = cmd.get("path", [])
             self.mission_path = cmd.get("path", [])
             self.pois = cmd.get("pois", [])
             self.path_index = 0
+            poi_ids = [p.get("id", "?") for p in self.pois]
+            self._log(
+                f"CMD send_mission → {len(self.pois)} POIs [{', '.join(poi_ids)}], "
+                f"{len(self.mission_path)} path points"
+            )
             if self.armed and self.mission_path:
                 self.mode = "AUTO"
+                self._log(f"  → AUTO mode, targeting path[0]")
         elif cmd_type == "set_mode":
+            old = self.mode
             self.mode = cmd.get("mode", self.mode)
+            self._log(f"CMD set_mode {old} → {self.mode}")
         elif cmd_type == "return_home":
             self.mode = "RTL"
+            self._log(f"CMD return_home → RTL ({self.home_lat:.4f}, {self.home_lon:.4f})")
         elif cmd_type == "reset":
             self.lat = self.home_lat
             self.lon = self.home_lon
@@ -242,7 +277,7 @@ class DroneState:
             self.pois = []
             self.mission_path = []
             self.path_index = 0
-            self.loiter_start = None
+            self._log("CMD reset → home position, armed, STABILIZE")
 
 
 async def sim_server(
