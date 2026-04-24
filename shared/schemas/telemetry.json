@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "launchpad/telemetry",
+  "description": "MAVLink telemetry state broadcast from backend to browser at ~10Hz",
+  "type": "object",
+  "required": ["timestamp", "armed", "mode", "position", "attitude", "velocity", "battery", "gps"],
+  "properties": {
+    "timestamp": {
+      "type": "number",
+      "description": "Unix timestamp (ms) when this telemetry was recorded on the drone"
+    },
+    "armed": {
+      "type": "boolean",
+      "description": "Whether the flight controller is armed"
+    },
+    "mode": {
+      "type": "string",
+      "description": "Current ArduPilot flight mode",
+      "examples": ["LOITER", "QLOITER", "AUTO", "GUIDED", "RTL", "QHOVER", "FBWA"]
+    },
+    "position": {
+      "type": "object",
+      "required": ["lat", "lon", "alt_msl", "alt_rel"],
+      "properties": {
+        "lat":     { "type": "number", "description": "Latitude (degrees)" },
+        "lon":     { "type": "number", "description": "Longitude (degrees)" },
+        "alt_msl": { "type": "number", "description": "Altitude above mean sea level (metres)" },
+        "alt_rel": { "type": "number", "description": "Altitude above home position (metres)" }
+      }
+    },
+    "attitude": {
+      "type": "object",
+      "required": ["roll", "pitch", "yaw"],
+      "properties": {
+        "roll":  { "type": "number", "description": "Roll angle (degrees, positive = right wing down)" },
+        "pitch": { "type": "number", "description": "Pitch angle (degrees, positive = nose up)" },
+        "yaw":   { "type": "number", "description": "Yaw / heading (degrees, 0 = north)" }
+      }
+    },
+    "velocity": {
+      "type": "object",
+      "required": ["ground_speed", "air_speed", "climb_rate"],
+      "properties": {
+        "ground_speed": { "type": "number", "description": "Ground speed (m/s)" },
+        "air_speed":    { "type": "number", "description": "Airspeed (m/s)" },
+        "climb_rate":   { "type": "number", "description": "Vertical speed (m/s, positive = climbing)" }
+      }
+    },
+    "battery": {
+      "type": "object",
+      "required": ["voltage", "current", "remaining_pct"],
+      "properties": {
+        "voltage":       { "type": "number", "description": "Battery voltage (V)" },
+        "current":       { "type": "number", "description": "Current draw (A)" },
+        "remaining_pct": { "type": "integer", "minimum": 0, "maximum": 100, "description": "Estimated charge remaining (%)" }
+      }
+    },
+    "gps": {
+      "type": "object",
+      "required": ["fix_type", "satellites_visible"],
+      "properties": {
+        "fix_type": {
+          "type": "integer",
+          "description": "GPS fix type (0=no fix, 2=2D, 3=3D, 4=DGPS, 5=RTK float, 6=RTK fixed)"
+        },
+        "satellites_visible": { "type": "integer", "description": "Number of satellites in view" }
+      }
+    },
+    "mission": {
+      "type": "object",
+      "description": "Current mission execution state (present only when AUTO mode active)",
+      "properties": {
+        "current_item":  { "type": "integer", "description": "Index of the active waypoint" },
+        "total_items":   { "type": "integer", "description": "Total waypoints in mission" },
+        "active_poi_id": { "type": ["string", "null"], "description": "ID of POI currently being loitered" }
+      }
+    }
+  }
+}

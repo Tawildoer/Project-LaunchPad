@@ -1,0 +1,86 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "launchpad/websocket",
+  "description": "Envelope for all WebSocket messages between backend and browser",
+  "type": "object",
+  "required": ["type", "payload"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": [
+        "telemetry",
+        "command",
+        "mission_update",
+        "connection_status",
+        "video_signal",
+        "copilot_request",
+        "copilot_response"
+      ]
+    },
+    "payload": {
+      "type": "object",
+      "description": "Message body — schema depends on type field"
+    }
+  },
+  "$defs": {
+    "connection_status_payload": {
+      "description": "Broadcast when drone connection state changes",
+      "type": "object",
+      "required": ["drone_id", "status"],
+      "properties": {
+        "drone_id": { "type": "string" },
+        "status": {
+          "type": "string",
+          "enum": ["connected", "reconnecting", "disconnected"]
+        }
+      }
+    },
+    "mission_update_payload": {
+      "description": "Current state of the mission queue, broadcast on any change",
+      "type": "object",
+      "required": ["pois", "active_poi_index"],
+      "properties": {
+        "pois":             { "type": "array", "description": "Full POI list (ref: commands.json#/$defs/poi)" },
+        "active_poi_index": { "type": ["integer", "null"], "description": "Which POI the drone is currently at" },
+        "status":           { "type": "string", "enum": ["idle", "in_progress", "complete"] }
+      }
+    },
+    "video_signal_payload": {
+      "description": "WebRTC signaling messages forwarded between drone-agent and browser",
+      "type": "object",
+      "required": ["signal_type", "data"],
+      "properties": {
+        "signal_type": { "type": "string", "enum": ["offer", "answer", "ice_candidate"] },
+        "data":        { "type": "object", "description": "Raw WebRTC SDP or ICE candidate object" }
+      }
+    },
+    "copilot_request_payload": {
+      "description": "Natural language input from the operator",
+      "type": "object",
+      "required": ["text"],
+      "properties": {
+        "text":       { "type": "string", "description": "The operator's message" },
+        "session_id": { "type": "string", "description": "Browser session ID for conversation continuity" }
+      }
+    },
+    "copilot_response_payload": {
+      "description": "Claude's response — either an answer, a clarifying question, or a confirmation prompt",
+      "type": "object",
+      "required": ["response_type", "text"],
+      "properties": {
+        "response_type": {
+          "type": "string",
+          "enum": ["answer", "clarification", "confirmation_required", "executed"]
+        },
+        "text": {
+          "type": "string",
+          "description": "Human-readable response to display in the copilot bar"
+        },
+        "pending_command": {
+          "description": "Present when response_type is confirmation_required — the command awaiting approval",
+          "$ref": "commands.json"
+        }
+      }
+    }
+  }
+}

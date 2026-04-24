@@ -1,0 +1,103 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "launchpad/commands",
+  "description": "Commands sent from browser (or copilot) to backend, which forwards to the drone",
+  "oneOf": [
+    {
+      "title": "Arm",
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "arm" }
+      }
+    },
+    {
+      "title": "Disarm",
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "disarm" }
+      }
+    },
+    {
+      "title": "SetMode",
+      "type": "object",
+      "required": ["type", "mode"],
+      "properties": {
+        "type": { "const": "set_mode" },
+        "mode": {
+          "type": "string",
+          "enum": ["LOITER", "QLOITER", "RTL", "AUTO", "GUIDED", "QHOVER", "FBWA"],
+          "description": "Target ArduPilot flight mode"
+        }
+      }
+    },
+    {
+      "title": "FlyTo",
+      "description": "Command drone to fly directly to a coordinate (GUIDED mode)",
+      "type": "object",
+      "required": ["type", "lat", "lon", "alt"],
+      "properties": {
+        "type": { "const": "fly_to" },
+        "lat": { "type": "number" },
+        "lon": { "type": "number" },
+        "alt": { "type": "number", "description": "Target altitude above home (metres)" }
+      }
+    },
+    {
+      "title": "ReturnHome",
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "return_home" }
+      }
+    },
+    {
+      "title": "SendMission",
+      "description": "Upload a full POI mission to the drone",
+      "type": "object",
+      "required": ["type", "pois"],
+      "properties": {
+        "type": { "const": "send_mission" },
+        "min_turn_radius": {
+          "type": "number",
+          "description": "Aircraft minimum turn radius (metres) — used for spline generation"
+        },
+        "pois": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/poi" },
+          "minItems": 1
+        }
+      }
+    },
+    {
+      "title": "SetIdleMode",
+      "description": "Configure what the drone does when the mission queue empties",
+      "type": "object",
+      "required": ["type", "idle_mode"],
+      "properties": {
+        "type": { "const": "set_idle_mode" },
+        "idle_mode": {
+          "type": "string",
+          "enum": ["LOITER", "QLOITER"],
+          "description": "LOITER = fixed-wing glide circles (efficient), QLOITER = multirotor hover (precise)"
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "poi": {
+      "title": "PointOfInterest",
+      "type": "object",
+      "required": ["id", "lat", "lon", "loiter_radius", "dwell_seconds"],
+      "properties": {
+        "id":             { "type": "string", "description": "Unique identifier, e.g. POI-01" },
+        "lat":            { "type": "number" },
+        "lon":            { "type": "number" },
+        "alt":            { "type": "number", "description": "Loiter altitude above home (metres)" },
+        "loiter_radius":  { "type": "number", "description": "Circle radius around POI (metres)" },
+        "dwell_seconds":  { "type": "number", "description": "Time to loiter at this POI before proceeding" }
+      }
+    }
+  }
+}
