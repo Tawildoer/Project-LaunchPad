@@ -64,3 +64,28 @@ input[type="text"]:focus, input[type="number"]:focus {
   height: 100%;
   background: var(--bg);
 }
+
+.panels {
+  display: flex;
+  overflow: hidden;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.panel {
+  overflow: hidden;
+  position: relative;
+}
+
+.panel-divider {
+  width: 4px;
+  background: var(--border);
+  cursor: col-resize;
+  flex-shrink: 0;
+  transition: background 0.1s;
+}
+
+.panel-divider:hover,
+.panel-divider.dragging {
+  background: var(--green-dim);
+}
