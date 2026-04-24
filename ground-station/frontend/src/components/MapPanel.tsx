@@ -282,17 +282,32 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
   }), [remainingPath])
 
   const trailGeoJson = useMemo(() => {
+    const empty = { type: 'FeatureCollection' as const, features: [] as { type: 'Feature'; properties: Record<string, number>; geometry: { type: 'LineString'; coordinates: [number, number][] } }[] }
+    if (settings.trailMode === 'off') return empty
     const trail = trailRef.current
-    if (trail.length < 2) return { type: 'FeatureCollection' as const, features: [] }
-    return {
-      type: 'FeatureCollection' as const,
-      features: [{
-        type: 'Feature' as const,
-        properties: {},
-        geometry: { type: 'LineString' as const, coordinates: trail.map(p => [p.lon, p.lat]) },
-      }],
+    if (trail.length < 2) return empty
+
+    const makeFeat = (pts: { lat: number; lon: number }[], opacity: number) => ({
+      type: 'Feature' as const,
+      properties: { opacity },
+      geometry: { type: 'LineString' as const, coordinates: pts.map(p => [p.lon, p.lat] as [number, number]) },
+    })
+
+    if (settings.trailMode === 'solid') {
+      return { type: 'FeatureCollection' as const, features: [makeFeat(trail, 0.55)] }
     }
-  }, [telemetry?.position.lat, telemetry?.position.lon])
+
+    const BANDS = 8
+    const bandSize = Math.max(1, Math.floor(trail.length / BANDS))
+    const features = [] as typeof empty.features
+    for (let b = 0; b < BANDS; b++) {
+      const start = b * bandSize
+      const end = b === BANDS - 1 ? trail.length : (b + 1) * bandSize + 1
+      if (end - start < 2) continue
+      features.push(makeFeat(trail.slice(start, end), 0.07 + 0.55 * (b / (BANDS - 1))))
+    }
+    return { type: 'FeatureCollection' as const, features }
+  }, [telemetry?.position.lat, telemetry?.position.lon, settings.trailMode])
 
   const approachGeoJson = useMemo(() => {
     if (!telemetry || pois.length < 1 || path.length < 1 || pathJoinedRef.current)
@@ -336,7 +351,7 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
 
         <Source id="trail" type="geojson" data={trailGeoJson}>
           <Layer id="trail-line" type="line"
-            paint={{ 'line-color': '#666', 'line-width': 1.5, 'line-opacity': 0.55, 'line-dasharray': [2, 4] }} />
+            paint={{ 'line-color': '#666', 'line-width': 1.5, 'line-opacity': ['get', 'opacity'], 'line-dasharray': [2, 4] }} />
         </Source>
 
         <Source id="approach" type="geojson" data={approachGeoJson}>

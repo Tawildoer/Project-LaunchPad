@@ -15,10 +15,13 @@ export interface RecentConnection {
   connectedAt: string
 }
 
+export type TrailMode = 'solid' | 'fading' | 'off'
+
 export interface Settings {
   idleMode: IdleMode
   loiterRadius: number
   arcMode: ArcMode
+  trailMode: TrailMode
   webrtc: WebRtcSettings
   recentConnections: RecentConnection[]
 }
@@ -29,6 +32,7 @@ const DEFAULTS: Settings = {
   idleMode: 'LOITER',
   loiterRadius: 100,
   arcMode: 'cw',
+  trailMode: 'fading' as TrailMode,
   webrtc: {
     stunUrl: 'stun:stun.l.google.com:19302',
     icePolicy: 'all',

@@ -106,6 +106,30 @@ export default function SettingsPanel({ open }: Props) {
         </div>
       </div>
 
+      <div className="settings-row">
+        <span className="settings-label">TRAIL</span>
+        <div className="toggle-group">
+          <button
+            className={settings.trailMode === 'solid' ? 'active' : ''}
+            onClick={() => update({ trailMode: 'solid' })}
+          >
+            SOLID
+          </button>
+          <button
+            className={settings.trailMode === 'fading' ? 'active' : ''}
+            onClick={() => update({ trailMode: 'fading' })}
+          >
+            FADING
+          </button>
+          <button
+            className={settings.trailMode === 'off' ? 'active' : ''}
+            onClick={() => update({ trailMode: 'off' })}
+          >
+            OFF
+          </button>
+        </div>
+      </div>
+
       {/* WEBRTC */}
       <div className="settings-section-title">WEBRTC</div>
 
