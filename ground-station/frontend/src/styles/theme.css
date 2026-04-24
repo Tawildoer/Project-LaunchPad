@@ -1,0 +1,66 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg:           #0d0f0e;
+  --bg-surface:   #111412;
+  --green:        #39ff14;
+  --green-dim:    #4a9e5c;
+  --green-faint:  #1a3d20;
+  --amber:        #ffb700;
+  --red:          #ff3b3b;
+  --border:       rgba(57, 255, 20, 0.2);
+  --font:         'JetBrains Mono', 'Fira Code', monospace;
+  --text-sm:      11px;
+  --text-base:    13px;
+  --text-lg:      15px;
+}
+
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--green);
+  font-family: var(--font);
+  font-size: var(--text-base);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font-family: var(--font);
+  font-size: var(--text-sm);
+  background: transparent;
+  color: var(--green);
+  border: 1px solid var(--green);
+  padding: 3px 10px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+button:hover { background: var(--green-faint); }
+button:disabled { opacity: 0.35; cursor: not-allowed; }
+
+input[type="text"], input[type="number"] {
+  font-family: var(--font);
+  font-size: var(--text-sm);
+  background: var(--bg-surface);
+  color: var(--green);
+  border: 1px solid var(--border);
+  padding: 3px 8px;
+  outline: none;
+}
+
+input[type="text"]:focus, input[type="number"]:focus {
+  border-color: var(--green);
+}
+
+.app {
+  display: grid;
+  grid-template-rows: 36px 1fr 44px 52px;
+  height: 100%;
+  background: var(--bg);
+}
