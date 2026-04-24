@@ -2,6 +2,14 @@
 set -e
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
+VENV="$DIR/simulation/.venv"
+
+# Create venv if missing
+if [ ! -d "$VENV" ]; then
+  echo "[dev] creating simulation venv..."
+  /opt/homebrew/bin/python3 -m venv "$VENV"
+  "$VENV/bin/pip" install -q -r "$DIR/simulation/requirements.txt"
+fi
 
 cleanup() {
   kill $SIM_PID $VITE_PID 2>/dev/null
@@ -10,7 +18,7 @@ cleanup() {
 trap cleanup EXIT
 
 echo "[dev] starting drone sim..."
-python3 "$DIR/simulation/drone_sim.py" --armed "$@" &
+"$VENV/bin/python3" "$DIR/simulation/drone_sim.py" --armed "$@" &
 SIM_PID=$!
 sleep 1
 
