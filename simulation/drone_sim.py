@@ -107,12 +107,29 @@ class DroneState:
             self.mode = "LOITER"
             return
 
-        target = self.mission_path[self.path_index]
-        d = dist_m(self.lat, self.lon, target["lat"], target["lon"])
-        self._steer_toward(target["lat"], target["lon"], dt)
+        # Advance past points the drone has already passed
+        cos_lat = math.cos(math.radians(self.lat))
+        while self.path_index < len(self.mission_path) - 1:
+            curr = self.mission_path[self.path_index]
+            nxt = self.mission_path[self.path_index + 1]
+            ax = (nxt["lon"] - curr["lon"]) * cos_lat * DEG_TO_M
+            ay = (nxt["lat"] - curr["lat"]) * DEG_TO_M
+            bx = (self.lon - curr["lon"]) * cos_lat * DEG_TO_M
+            by = (self.lat - curr["lat"]) * DEG_TO_M
+            seg_len_sq = ax * ax + ay * ay
+            if seg_len_sq > 0 and (ax * bx + ay * by) / seg_len_sq >= 1.0:
+                self.path_index += 1
+            else:
+                break
 
-        if d < 30:
-            self.path_index += 1
+        if self.path_index >= len(self.mission_path):
+            self.mode = "LOITER"
+            return
+
+        # Steer toward a lookahead point for smooth tracking
+        lookahead = min(self.path_index + 3, len(self.mission_path) - 1)
+        target = self.mission_path[lookahead]
+        self._steer_toward(target["lat"], target["lon"], dt)
 
     def telemetry_dict(self) -> dict:
         noise = 2.0 if self.armed else 0.3
