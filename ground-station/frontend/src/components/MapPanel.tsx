@@ -90,8 +90,6 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
   const trailCountRef   = useRef(0)
   const pathProgressRef = useRef(0)
   const pathJoinedRef   = useRef(false)
-  const consumptionPathRef = useRef<{ lat: number; lon: number }[]>([])
-  const prevPoiCountRef = useRef(0)
 
   const initialLat = telemetry?.position.lat ?? DEFAULT_LAT
   const initialLon = telemetry?.position.lon ?? DEFAULT_LON
@@ -269,72 +267,63 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
     })
   }, [pois, effectiveArcMode, send])
 
+  // Reset consumption on any POI change
   useEffect(() => {
-    const added = pois.length > prevPoiCountRef.current
-    const cleared = pois.length === 0
-    prevPoiCountRef.current = pois.length
-    if (added || cleared) {
-      pathProgressRef.current = 0
-      pathJoinedRef.current = false
-      consumptionPathRef.current = []
-    }
-  }, [pois, effectiveArcMode])
+    pathProgressRef.current = 0
+    pathJoinedRef.current = false
+  }, [pois])
 
+  // Path consumption: show full path until drone reaches it, then peel
+  // back with a windowed closest-segment search on the live path.
   const remainingPath = useMemo(() => {
     if (!telemetry || path.length < 2) return path
     const { lat, lon } = telemetry.position
 
+    // Gate: don't consume until drone reaches the path
     if (!pathJoinedRef.current) {
       if (distMeters(lat, lon, path[0].lat, path[0].lon) <= 80) {
         pathJoinedRef.current = true
-        consumptionPathRef.current = [...path]
         pathProgressRef.current = 0
+      } else {
+        return path
       }
     }
 
-    if (!pathJoinedRef.current) return path
+    // Cap progress to path length (path may have changed)
+    if (pathProgressRef.current >= path.length - 1) return path.slice(-1)
 
-    const cPath = consumptionPathRef.current
-    if (cPath.length < 2) return path
+    // Windowed search: find closest segment within 30 ahead of progress
+    const WINDOW = 30
+    const searchEnd = Math.min(pathProgressRef.current + WINDOW, path.length - 1)
+    let bestSeg = pathProgressRef.current
+    let bestDist = Infinity
+    let bestT = 0
 
-    if (pathProgressRef.current >= cPath.length - 1) {
-      return cPath.slice(cPath.length - 1)
-    }
-
-    let seg = pathProgressRef.current
-    let lastT = 0
-
-    while (seg < cPath.length - 1) {
-      const p0 = cPath[seg], p1 = cPath[seg + 1]
+    for (let i = pathProgressRef.current; i < searchEnd; i++) {
+      const p0 = path[i], p1 = path[i + 1]
       const cosLat = Math.cos(lat * Math.PI / 180)
       const ex = (p1.lon - p0.lon) * cosLat * 111320
       const ey = (p1.lat - p0.lat) * 111320
-      const segLen2 = ex * ex + ey * ey
-      if (segLen2 < 0.01) { seg++; continue }
       const fx = (lon - p0.lon) * cosLat * 111320
       const fy = (lat - p0.lat) * 111320
-      lastT = (fx * ex + fy * ey) / segLen2
-      if (lastT >= 1.0) {
-        seg++
-      } else {
-        break
-      }
+      const segLen2 = ex * ex + ey * ey
+      if (segLen2 < 0.01) continue
+      const t = Math.max(0, Math.min(1, (fx * ex + fy * ey) / segLen2))
+      const projLat = p0.lat + t * (p1.lat - p0.lat)
+      const projLon = p0.lon + t * (p1.lon - p0.lon)
+      const d = distMeters(lat, lon, projLat, projLon)
+      if (d < bestDist) { bestDist = d; bestSeg = i; bestT = t }
     }
 
-    pathProgressRef.current = seg
+    pathProgressRef.current = bestSeg
 
-    if (seg >= cPath.length - 1) {
-      return cPath.slice(cPath.length - 1)
-    }
-
-    const tClamped = Math.max(0, Math.min(1, lastT))
-    const p0 = cPath[seg], p1 = cPath[seg + 1]
+    const p0 = path[bestSeg], p1 = path[bestSeg + 1]
     const proj = {
-      lat: p0.lat + tClamped * (p1.lat - p0.lat),
-      lon: p0.lon + tClamped * (p1.lon - p0.lon),
+      lat: p0.lat + bestT * (p1.lat - p0.lat),
+      lon: p0.lon + bestT * (p1.lon - p0.lon),
     }
-    return [proj, ...cPath.slice(seg + 1)]
-  }, [telemetry?.position.lat, telemetry?.position.lon, path, pois])
+    return [proj, ...path.slice(bestSeg + 1)]
+  }, [telemetry?.position.lat, telemetry?.position.lon, path])
 
   const pathGeoJson = useMemo(() => ({
     type: 'FeatureCollection' as const,
