@@ -38,7 +38,7 @@ class DroneState:
         self,
         lat: float = -37.854,
         lon: float = 145.059,
-        speed: float = 40.0,
+        speed: float = 80.0,
         wind_speed: float = 2.0,
         min_turn_radius: float = 80.0,
     ):
@@ -107,15 +107,17 @@ class DroneState:
             self.mode = "LOITER"
             return
 
-        # Advance one point per tick when closer to next point than current
+        # Advance one point per tick via along-track projection
         if self.path_index < len(self.mission_path) - 1:
-            d_curr = dist_m(self.lat, self.lon,
-                            self.mission_path[self.path_index]["lat"],
-                            self.mission_path[self.path_index]["lon"])
-            d_next = dist_m(self.lat, self.lon,
-                            self.mission_path[self.path_index + 1]["lat"],
-                            self.mission_path[self.path_index + 1]["lon"])
-            if d_next < d_curr:
+            curr = self.mission_path[self.path_index]
+            nxt = self.mission_path[self.path_index + 1]
+            cos_lat = math.cos(math.radians(self.lat))
+            ax = (nxt["lon"] - curr["lon"]) * cos_lat * DEG_TO_M
+            ay = (nxt["lat"] - curr["lat"]) * DEG_TO_M
+            bx = (self.lon - curr["lon"]) * cos_lat * DEG_TO_M
+            by = (self.lat - curr["lat"]) * DEG_TO_M
+            seg_len_sq = ax * ax + ay * ay
+            if seg_len_sq > 0 and (ax * bx + ay * by) / seg_len_sq >= 1.0:
                 self.path_index += 1
 
         if self.path_index >= len(self.mission_path):
@@ -123,7 +125,7 @@ class DroneState:
             return
 
         # Pure pursuit with tight lookahead for circle tracking
-        lookahead_m = self.min_turn_radius * 0.2
+        lookahead_m = 15.0
 
         # Walk forward from current index by lookahead distance
         dist_left = lookahead_m
@@ -253,7 +255,7 @@ def main() -> None:
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--lat", type=float, default=-37.854)
     parser.add_argument("--lon", type=float, default=145.059)
-    parser.add_argument("--speed", type=float, default=40.0)
+    parser.add_argument("--speed", type=float, default=80.0)
     parser.add_argument("--wind", type=float, default=2.0)
     parser.add_argument("--turn-radius", type=float, default=80.0)
     parser.add_argument("--armed", action="store_true", help="Start drone pre-armed")
