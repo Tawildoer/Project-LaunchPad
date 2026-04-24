@@ -1,0 +1,265 @@
+import math
+import random
+import time
+import asyncio
+import json
+import argparse
+
+try:
+    import websockets
+except ImportError:
+    print("Install websockets: pip install -r simulation/requirements.txt")
+    raise
+
+DEG_TO_M = 111320.0
+
+
+def bearing_deg(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    cos_lat = math.cos(math.radians(lat1))
+    dx = (lon2 - lon1) * cos_lat * DEG_TO_M
+    dy = (lat2 - lat1) * DEG_TO_M
+    return math.degrees(math.atan2(dx, dy)) % 360
+
+
+def dist_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    cos_lat = math.cos(math.radians(lat1))
+    dx = (lon2 - lon1) * cos_lat * DEG_TO_M
+    dy = (lat2 - lat1) * DEG_TO_M
+    return math.sqrt(dx * dx + dy * dy)
+
+
+def shortest_angle_diff(target: float, current: float) -> float:
+    d = (target - current) % 360
+    return d - 360 if d > 180 else d
+
+
+class DroneState:
+    def __init__(
+        self,
+        lat: float = -37.854,
+        lon: float = 145.059,
+        speed: float = 18.0,
+        wind_speed: float = 3.0,
+        min_turn_radius: float = 80.0,
+    ):
+        self.lat = lat
+        self.lon = lon
+        self.alt_msl = 150.0
+        self.alt_rel = 80.0
+        self.heading = 0.0
+        self.speed = speed
+        self.battery = 98.0
+        self.armed = False
+        self.mode = "STABILIZE"
+
+        self.home_lat = lat
+        self.home_lon = lon
+        self.min_turn_radius = min_turn_radius
+
+        self.wind_base_speed = wind_speed
+        self.wind_angle = random.uniform(0, 360)
+        self.wind_gust = 0.0
+
+        self.pois: list[dict] = []
+        self.current_poi_index = 0
+        self.loiter_start: float | None = None
+        self.loiter_target_angle = 0.0
+
+    def tick(self, dt: float) -> None:
+        self.battery = max(0.0, self.battery - 0.0003 * dt)
+
+        self.wind_angle = (self.wind_angle + (random.random() - 0.5) * 5) % 360
+        self.wind_gust = max(0.0, self.wind_gust + (random.random() - 0.5) * 2)
+        self.wind_gust = min(self.wind_gust, self.wind_base_speed * 0.5)
+        wind_speed = self.wind_base_speed + self.wind_gust
+
+        if not self.armed:
+            return
+
+        if self.mode == "AUTO" and self.pois:
+            self._steer_mission(dt)
+        elif self.mode == "RTL":
+            self._steer_toward(self.home_lat, self.home_lon, dt)
+            if dist_m(self.lat, self.lon, self.home_lat, self.home_lon) < 10:
+                self.mode = "LOITER"
+
+        self.heading = (self.heading + (random.random() - 0.5) * 3) % 360
+
+        move_m = self.speed * dt
+        rad = math.radians(self.heading)
+        cos_lat = math.cos(math.radians(self.lat))
+        self.lat += (move_m * math.cos(rad)) / DEG_TO_M
+        self.lon += (move_m * math.sin(rad)) / (DEG_TO_M * cos_lat)
+
+        wind_rad = math.radians(self.wind_angle)
+        wind_m = wind_speed * dt
+        self.lat += (wind_m * math.cos(wind_rad)) / DEG_TO_M
+        self.lon += (wind_m * math.sin(wind_rad)) / (DEG_TO_M * cos_lat)
+
+    def _steer_toward(self, target_lat: float, target_lon: float, dt: float) -> None:
+        desired = bearing_deg(self.lat, self.lon, target_lat, target_lon)
+        error = shortest_angle_diff(desired, self.heading)
+        max_rate = math.degrees(self.speed / self.min_turn_radius) * dt
+        clamped = max(-max_rate, min(max_rate, error))
+        self.heading = (self.heading + clamped) % 360
+
+    def _steer_mission(self, dt: float) -> None:
+        if self.current_poi_index >= len(self.pois):
+            self.mode = "LOITER"
+            return
+
+        poi = self.pois[self.current_poi_index]
+        center_lat, center_lon = poi["lat"], poi["lon"]
+        radius = poi["loiter_radius"]
+        d = dist_m(self.lat, self.lon, center_lat, center_lon)
+
+        if self.loiter_start is None:
+            if d <= radius * 1.1:
+                self.loiter_start = time.time()
+                self.loiter_target_angle = bearing_deg(
+                    center_lat, center_lon, self.lat, self.lon
+                )
+            else:
+                self._steer_toward(center_lat, center_lon, dt)
+        else:
+            orbit_rate = math.degrees(self.speed / radius) * dt
+            self.loiter_target_angle = (self.loiter_target_angle + orbit_rate) % 360
+            target_rad = math.radians(self.loiter_target_angle)
+            cos_c = math.cos(math.radians(center_lat))
+            target_lat = center_lat + (radius * math.cos(target_rad)) / DEG_TO_M
+            target_lon = center_lon + (radius * math.sin(target_rad)) / (
+                DEG_TO_M * cos_c
+            )
+            self._steer_toward(target_lat, target_lon, dt)
+
+            dwell = poi.get("dwell_seconds", 60)
+            if time.time() - self.loiter_start >= dwell:
+                self.loiter_start = None
+                self.current_poi_index += 1
+                if self.current_poi_index >= len(self.pois):
+                    self.mode = "LOITER"
+
+    def telemetry_dict(self) -> dict:
+        gps_lat = self.lat + (random.random() - 0.5) * 2 * (1 / DEG_TO_M)
+        gps_lon = self.lon + (random.random() - 0.5) * 2 * (
+            1 / (DEG_TO_M * math.cos(math.radians(self.lat)))
+        )
+
+        turn_component = self.speed / max(self.min_turn_radius, 1)
+        roll = turn_component * 3
+
+        return {
+            "timestamp": int(time.time() * 1000),
+            "armed": self.armed,
+            "mode": self.mode,
+            "position": {
+                "lat": gps_lat,
+                "lon": gps_lon,
+                "alt_msl": self.alt_msl,
+                "alt_rel": self.alt_rel,
+            },
+            "attitude": {"roll": roll, "pitch": 2.0, "yaw": self.heading},
+            "velocity": {
+                "ground_speed": self.speed,
+                "air_speed": self.speed + 4,
+                "climb_rate": 0.0,
+            },
+            "battery": {
+                "voltage": 22.2,
+                "current": 12.5,
+                "remaining_pct": round(self.battery),
+            },
+            "gps": {"fix_type": 3, "satellites_visible": 12},
+        }
+
+    def handle_command(self, cmd: dict) -> None:
+        cmd_type = cmd.get("type")
+        if cmd_type == "arm":
+            self.armed = True
+            self.mode = "STABILIZE"
+        elif cmd_type == "disarm":
+            self.armed = False
+        elif cmd_type == "send_mission":
+            self.pois = cmd.get("pois", [])
+            self.current_poi_index = 0
+            self.loiter_start = None
+            if self.armed and self.pois:
+                self.mode = "AUTO"
+        elif cmd_type == "set_mode":
+            self.mode = cmd.get("mode", self.mode)
+        elif cmd_type == "return_home":
+            self.mode = "RTL"
+            self.loiter_start = None
+
+
+async def sim_server(
+    host: str,
+    port: int,
+    drone: DroneState,
+    tick_hz: float = 30.0,
+) -> None:
+    clients: set = set()
+    dt = 1.0 / tick_hz
+
+    async def handler(ws) -> None:
+        clients.add(ws)
+        print(f"[sim] client connected ({len(clients)} total)")
+        await ws.send(json.dumps({
+            "type": "connection_status",
+            "payload": {"drone_id": "SIM-001", "status": "connected"},
+        }))
+        try:
+            async for raw in ws:
+                try:
+                    msg = json.loads(raw)
+                    if msg.get("type") == "command":
+                        drone.handle_command(msg.get("payload", {}))
+                        print(f"[sim] command: {msg['payload'].get('type')}")
+                except json.JSONDecodeError:
+                    pass
+        finally:
+            clients.discard(ws)
+            print(f"[sim] client disconnected ({len(clients)} total)")
+
+    async def broadcast_loop() -> None:
+        while True:
+            drone.tick(dt)
+            telem = json.dumps({"type": "telemetry", "payload": drone.telemetry_dict()})
+            if clients:
+                await asyncio.gather(
+                    *(c.send(telem) for c in clients.copy()),
+                    return_exceptions=True,
+                )
+            await asyncio.sleep(dt)
+
+    async with websockets.serve(handler, host, port):
+        print(f"[sim] drone simulator listening on ws://{host}:{port}")
+        print(f"[sim] position: ({drone.lat:.4f}, {drone.lon:.4f})")
+        print(f"[sim] speed={drone.speed}m/s  wind={drone.wind_base_speed}m/s  turn_radius={drone.min_turn_radius}m")
+        await broadcast_loop()
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="LaunchPad drone simulator")
+    parser.add_argument("--port", type=int, default=5000)
+    parser.add_argument("--host", default="0.0.0.0")
+    parser.add_argument("--lat", type=float, default=-37.854)
+    parser.add_argument("--lon", type=float, default=145.059)
+    parser.add_argument("--speed", type=float, default=18.0)
+    parser.add_argument("--wind", type=float, default=3.0)
+    parser.add_argument("--turn-radius", type=float, default=80.0)
+    args = parser.parse_args()
+
+    drone = DroneState(
+        lat=args.lat,
+        lon=args.lon,
+        speed=args.speed,
+        wind_speed=args.wind,
+        min_turn_radius=args.turn_radius,
+    )
+
+    asyncio.run(sim_server(args.host, args.port, drone))
+
+
+if __name__ == "__main__":
+    main()
