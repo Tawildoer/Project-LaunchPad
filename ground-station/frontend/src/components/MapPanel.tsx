@@ -332,7 +332,17 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
       }
     }
 
-    return [proj, ...fp.slice(seg + 1), ...extension]
+    if (extension.length > 0) {
+      const extStart = extension[0]
+      let cutIdx = fp.length - 1
+      let cutMinD = Infinity
+      for (let i = seg + 1; i < fp.length; i++) {
+        const d = distMeters(fp[i].lat, fp[i].lon, extStart.lat, extStart.lon)
+        if (d < cutMinD) { cutMinD = d; cutIdx = i }
+      }
+      return [proj, ...fp.slice(seg + 1, cutIdx + 1), ...extension]
+    }
+    return [proj, ...fp.slice(seg + 1)]
   }, [telemetry?.position.lat, telemetry?.position.lon, path])
 
   // Remove POI when progress moves past its arc onto tangent/next POI
