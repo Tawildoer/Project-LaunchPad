@@ -230,23 +230,6 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
 
   const effectiveArcMode = pois.length > 0 ? pois[0].arc_mode : settings.arcMode
 
-  // Send mission + dense path to backend/sim when POIs change
-  useEffect(() => {
-    if (pois.length === 0) return
-    const missionPath = buildMissionPath(pois, effectiveArcMode)
-    send({
-      type: 'command',
-      payload: {
-        type: 'send_mission',
-        pois: pois.map(p => ({
-          id: p.id, lat: p.lat, lon: p.lon, alt: p.alt,
-          loiter_radius: p.loiter_radius, dwell_seconds: p.dwell_seconds,
-        })),
-        path: missionPath.map(p => ({ lat: p.lat, lon: p.lon })),
-      },
-    })
-  }, [pois, effectiveArcMode, send])
-
   const entryAngle = useMemo(() => {
     if (!telemetry || pois.length < 1) return undefined
     return approachEntryAngle(
@@ -261,6 +244,25 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
     () => buildMissionPath(pois, effectiveArcMode, entryAngle),
     [pois, effectiveArcMode, entryAngle],
   )
+
+  const pathRef = useRef(path)
+  pathRef.current = path
+
+  // Send mission + path to backend/sim when POIs change
+  useEffect(() => {
+    if (pois.length === 0) return
+    send({
+      type: 'command',
+      payload: {
+        type: 'send_mission',
+        pois: pois.map(p => ({
+          id: p.id, lat: p.lat, lon: p.lon, alt: p.alt,
+          loiter_radius: p.loiter_radius, dwell_seconds: p.dwell_seconds,
+        })),
+        path: pathRef.current.map(p => ({ lat: p.lat, lon: p.lon })),
+      },
+    })
+  }, [pois, effectiveArcMode, send])
 
   useEffect(() => {
     const added = pois.length > prevPoiCountRef.current
@@ -408,7 +410,7 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
 
         <Source id="trail" type="geojson" data={trailGeoJson}>
           <Layer id="trail-line" type="line"
-            paint={{ 'line-color': '#666', 'line-width': 1.5, 'line-opacity': ['get', 'opacity'], 'line-dasharray': [2, 4] }} />
+            paint={{ 'line-color': '#ff3b3b', 'line-width': 2, 'line-opacity': ['get', 'opacity'] }} />
         </Source>
 
         <Source id="approach" type="geojson" data={approachGeoJson}>
