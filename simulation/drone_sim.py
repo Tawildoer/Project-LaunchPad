@@ -181,9 +181,26 @@ class DroneState:
         elif cmd_type == "disarm":
             self.armed = False
         elif cmd_type == "send_mission":
-            self.pois = cmd.get("pois", [])
-            self.current_poi_index = 0
-            self.loiter_start = None
+            new_pois = cmd.get("pois", [])
+            current_id = (
+                self.pois[self.current_poi_index]["id"]
+                if self.current_poi_index < len(self.pois)
+                else None
+            )
+            self.pois = new_pois
+            if current_id:
+                new_idx = next(
+                    (i for i, p in enumerate(new_pois) if p.get("id") == current_id),
+                    None,
+                )
+                if new_idx is not None:
+                    self.current_poi_index = new_idx
+                else:
+                    self.current_poi_index = 0
+                    self.loiter_start = None
+            else:
+                self.current_poi_index = 0
+                self.loiter_start = None
             if self.armed and self.pois:
                 self.mode = "AUTO"
         elif cmd_type == "set_mode":
