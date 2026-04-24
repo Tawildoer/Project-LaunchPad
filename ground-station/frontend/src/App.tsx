@@ -4,6 +4,7 @@ import CommandBar from './components/CommandBar'
 import MapPanel from './components/MapPanel'
 import VideoPanel from './components/VideoPanel'
 import CopilotBar from './components/CopilotBar'
+import SettingsPanel from './components/SettingsPanel'
 
 export default function App() {
   const [leftPct, setLeftPct] = useState(50)
@@ -32,6 +33,7 @@ export default function App() {
 
   return (
     <div className="app" style={{ position: 'relative' }}>
+      <SettingsPanel />
       <StatusHeader />
       <div className="panels" ref={panelsRef}>
         <div className="panel" style={{ width: `${leftPct}%` }}>

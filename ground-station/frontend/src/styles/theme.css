@@ -217,3 +217,39 @@ input[type="text"]:focus, input[type="number"]:focus {
   gap: 12px;
   margin-top: 6px;
 }
+
+.settings-overlay {
+  position: fixed;
+  top: 36px;
+  right: 0;
+  width: 280px;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 16px;
+  z-index: 2000;
+  font-size: var(--text-sm);
+}
+
+.settings-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.settings-label {
+  color: var(--green-dim);
+  letter-spacing: 0.06em;
+}
+
+.toggle-group {
+  display: flex;
+  gap: 4px;
+}
+
+.toggle-group button.active {
+  background: var(--green-faint);
+  border-color: var(--green);
+  color: var(--green);
+}
