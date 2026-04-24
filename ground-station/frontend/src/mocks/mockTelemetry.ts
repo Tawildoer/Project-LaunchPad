@@ -41,26 +41,6 @@ function pathLength(path: { lat: number; lon: number }[]): number {
   return total
 }
 
-function externalTangentPoints(
-  dLat: number, dLon: number,
-  cLat: number, cLon: number,
-  r: number,
-): [{ lat: number; lon: number }, { lat: number; lon: number }] {
-  const cosLat = Math.cos(dLat * Math.PI / 180)
-  const dxM = (cLon - dLon) * cosLat * 111320
-  const dyM = (cLat - dLat) * 111320
-  const d   = Math.sqrt(dxM * dxM + dyM * dyM)
-  if (d <= r) return [{ lat: cLat, lon: cLon }, { lat: cLat, lon: cLon }]
-  const theta = Math.atan2(dxM, dyM)
-  const alpha = Math.asin(Math.min(1, r / d))
-  const L     = Math.sqrt(Math.max(0, d * d - r * r))
-  const make  = (a: number) => ({
-    lat: dLat + L * Math.cos(a) / 111320,
-    lon: dLon + L * Math.sin(a) / (111320 * cosLat),
-  })
-  return [make(theta + alpha), make(theta - alpha)]
-}
-
 export function createMockTelemetryEmitter(
   onTelemetry: TelemetryCallback,
   onStatus: StatusCallback,
@@ -75,6 +55,7 @@ export function createMockTelemetryEmitter(
   let seenVersion  = -1
   let activePath: { lat: number; lon: number }[] = []
   let activeLength = 0
+  let approachLen  = 0
   let traveledM    = 0
   let curLat       = CENTER_LAT
   let curLon       = CENTER_LON
@@ -96,22 +77,15 @@ export function createMockTelemetryEmitter(
       wasInPathMode = true
       if (version !== seenVersion) {
         seenVersion = version
-        // Insert a tangent waypoint so the drone approaches the first loiter
-        // circle along the same tangent line shown on the map.
-        const fp = demoState.firstPoi
-        let approachPts: { lat: number; lon: number }[] = []
-        if (fp && path.length > 0) {
-          const [tp1, tp2] = externalTangentPoints(curLat, curLon, fp.lat, fp.lon, fp.loiter_radius)
-          const d1 = distM(tp1, path[0])
-          const d2 = distM(tp2, path[0])
-          approachPts = [d1 <= d2 ? tp1 : tp2]
-        }
-        activePath   = [{ lat: curLat, lon: curLon }, ...approachPts, ...path]
+        activePath   = [{ lat: curLat, lon: curLon }, ...path]
+        approachLen  = path.length > 0 ? distM({ lat: curLat, lon: curLon }, path[0]) : 0
         activeLength = pathLength(activePath)
         traveledM    = 0
+        demoState.activeMissionPath = [...path]
       }
 
       traveledM = Math.min(traveledM + speedMs * (TICK_MS / 1000), activeLength)
+      demoState.pathDistanceM = Math.max(0, traveledM - approachLen)
 
       const pos = posAtDistance(activePath, traveledM)
       curLat = pos.lat
@@ -150,6 +124,8 @@ export function createMockTelemetryEmitter(
       if (seenVersion !== version) {
         seenVersion = version
         activePath  = []
+        demoState.pathDistanceM = 0
+        demoState.activeMissionPath = []
       }
 
       if (wasInPathMode) {

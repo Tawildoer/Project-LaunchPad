@@ -14,7 +14,7 @@ export default function DemoToolbar() {
       <div className="demo-control">
         <span>SPD</span>
         <input
-          type="range" min={2} max={40} step={1} value={speed}
+          type="range" min={2} max={100} step={1} value={speed}
           onChange={e => onSpeed(Number(e.target.value))}
         />
         <span className="demo-value">{speed}m/s</span>

@@ -5,7 +5,8 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import { useTelemetry } from '../store/TelemetryContext'
 import { useMission } from '../store/MissionContext'
 import { useSettings } from '../store/SettingsContext'
-import { buildMissionPath } from '../lib/pathPlanning'
+import { buildMissionPath, approachEntryAngle } from '../lib/pathPlanning'
+import { demoState } from '../mocks/demoState'
 import DemoToolbar from './DemoToolbar'
 
 const DEMO_MODE = !import.meta.env.VITE_WS_URL
@@ -75,27 +76,6 @@ function distMeters(lat1: number, lon1: number, lat2: number, lon2: number): num
   )
 }
 
-// Returns both tangent points from external point (dLat,dLon) to circle (cLat,cLon,r).
-function externalTangentPoints(
-  dLat: number, dLon: number,
-  cLat: number, cLon: number,
-  r: number,
-): [{ lat: number; lon: number }, { lat: number; lon: number }] {
-  const cosLat = Math.cos(dLat * Math.PI / 180)
-  const dxM = (cLon - dLon) * cosLat * 111320
-  const dyM = (cLat - dLat) * 111320
-  const d   = Math.sqrt(dxM * dxM + dyM * dyM)
-  if (d <= r) return [{ lat: cLat, lon: cLon }, { lat: cLat, lon: cLon }]
-  const theta = Math.atan2(dxM, dyM)
-  const alpha = Math.asin(Math.min(1, r / d))
-  const L     = Math.sqrt(Math.max(0, d * d - r * r))
-  const make  = (a: number) => ({
-    lat: dLat + L * Math.cos(a) / 111320,
-    lon: dLon + L * Math.sin(a) / (111320 * cosLat),
-  })
-  return [make(theta + alpha), make(theta - alpha)]
-}
-
 
 export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
   const { telemetry } = useTelemetry()
@@ -110,10 +90,6 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
   const followTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // POI dwell tracking — records timestamp when drone first entered each loiter circle
   const poiEntryRef     = useRef<Record<string, number>>({})
-  // Path progress — monotonically advancing index so consumed path never reappears
-  const pathProgressRef = useRef(0)
-  // Gate: consumption only begins once drone enters the first loiter circle
-  const pathJoinedRef   = useRef(false)
   // Historical trail — all positions the drone has visited this session
   const trailRef        = useRef<{ lat: number; lon: number }[]>([])
 
@@ -150,18 +126,23 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
 
     for (const poi of pois) {
       const d       = distMeters(lat, lon, poi.lat, poi.lon)
-      const inside  = d <= poi.loiter_radius
-      const nearby  = d <= poi.loiter_radius * 1.25  // grace zone once timer starts
+      const inside  = d <= poi.loiter_radius * 1.15
+      const nearby  = d <= poi.loiter_radius * 1.35
 
       if (entries[poi.id] !== undefined) {
-        if (!nearby) {
-          delete entries[poi.id]  // truly left — reset
-        } else {
-          const dwellNeeded = (Math.PI * poi.loiter_radius / speed) * 1000
-          if (now - entries[poi.id] >= dwellNeeded) {
+        if (entries[poi.id] === -1) {
+          // Dwell complete — waiting for drone to leave
+          if (!nearby) {
             delete entries[poi.id]
             removePoi(poi.id)
             return
+          }
+        } else if (!nearby) {
+          delete entries[poi.id]
+        } else {
+          const dwellNeeded = (Math.PI * poi.loiter_radius / speed) * 1000
+          if (now - entries[poi.id] >= dwellNeeded) {
+            entries[poi.id] = -1  // mark dwell complete, wait for exit
           }
         }
       } else if (inside) {
@@ -211,8 +192,8 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
 
   const handleClick = useCallback((e: MapMouseEvent) => {
     const id = `POI-${String(Date.now()).slice(-4)}`
-    addPoi({ id, lat: e.lngLat.lat, lon: e.lngLat.lng, alt: 80, loiter_radius: settings.loiterRadius, dwell_seconds: 60 })
-  }, [addPoi, settings.loiterRadius])
+    addPoi({ id, lat: e.lngLat.lat, lon: e.lngLat.lng, alt: 80, loiter_radius: settings.loiterRadius, dwell_seconds: 60, arc_mode: settings.arcMode })
+  }, [addPoi, settings.loiterRadius, settings.arcMode])
 
   const handleRecentre = useCallback(() => {
     if (!telemetry) return
@@ -222,66 +203,51 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
     followTimeoutRef.current = setTimeout(() => setFollowing(true), 950)
   }, [telemetry])
 
+  const effectiveArcMode = pois.length > 0 ? pois[0].arc_mode : settings.arcMode
+
+  const entryAngle = useMemo(() => {
+    if (!telemetry || pois.length < 1) return undefined
+    return approachEntryAngle(
+      { lat: telemetry.position.lat, lon: telemetry.position.lon },
+      { lat: pois[0].lat, lon: pois[0].lon },
+      pois[0].loiter_radius,
+      effectiveArcMode,
+    )
+  }, [telemetry?.position.lat, telemetry?.position.lon, pois, effectiveArcMode])
+
   const path = useMemo(
-    () => buildMissionPath(pois, settings.arcMode),
-    [pois, settings.arcMode],
+    () => buildMissionPath(pois, effectiveArcMode, entryAngle),
+    [pois, effectiveArcMode, entryAngle],
   )
 
-  // Reset consumption state when path changes (new POIs, removal, or mode switch)
-  useEffect(() => { pathProgressRef.current = 0; pathJoinedRef.current = false }, [path])
-
-  // Loading-bar path: show full path until the drone enters the first loiter circle
-  // (pathJoined), then progressively consume segments via closest-segment projection.
+  // Distance-based path consumption: the mock tracks exactly how far the
+  // drone has traveled along the mission path (demoState.pathDistanceM).
+  // We walk that distance along demoState.path to find the consumption point.
   const remainingPath = useMemo(() => {
     if (!telemetry || path.length < 2) return path
-    const { lat, lon } = telemetry.position
+    if (!DEMO_MODE) return path
 
-    // Latch pathJoined when drone reaches path[0] (the arc entry point).
-    // Using path[0] rather than loiter-circle entry avoids a chunk-deletion on join:
-    // if we latched mid-arc, segments 0→N would all vanish at once.
-    if (!pathJoinedRef.current) {
-      if (distMeters(lat, lon, path[0].lat, path[0].lon) <= 80) {
-        pathJoinedRef.current = true
+    const progressM = demoState.pathDistanceM
+    if (progressM <= 0) return path
+
+    const cPath = demoState.activeMissionPath
+    if (cPath.length < 2) return path
+
+    let acc = 0
+    for (let i = 0; i < cPath.length - 1; i++) {
+      const segLen = distMeters(cPath[i].lat, cPath[i].lon, cPath[i + 1].lat, cPath[i + 1].lon)
+      if (acc + segLen >= progressM) {
+        const frac = segLen > 0 ? (progressM - acc) / segLen : 0
+        const proj = {
+          lat: cPath[i].lat + frac * (cPath[i + 1].lat - cPath[i].lat),
+          lon: cPath[i].lon + frac * (cPath[i + 1].lon - cPath[i].lon),
+        }
+        return [proj, ...cPath.slice(i + 1)]
       }
+      acc += segLen
     }
 
-    // Before joining: show the full remaining path
-    if (!pathJoinedRef.current) return path
-
-    // After joining: progressively consume via segment projection
-    if (pathProgressRef.current >= path.length - 1) {
-      return path.slice(path.length - 1)
-    }
-
-    const WINDOW = 40
-    const searchEnd = Math.min(pathProgressRef.current + WINDOW, path.length - 1)
-    let minD = Infinity
-    let bestSeg = pathProgressRef.current
-    let bestT   = 0
-
-    for (let i = pathProgressRef.current; i < searchEnd; i++) {
-      const p0 = path[i], p1 = path[i + 1]
-      const cosLat = Math.cos(lat * Math.PI / 180)
-      const ex = (p1.lon - p0.lon) * cosLat * 111320
-      const ey = (p1.lat - p0.lat) * 111320
-      const fx = (lon - p0.lon) * cosLat * 111320
-      const fy = (lat - p0.lat) * 111320
-      const segLen2 = ex * ex + ey * ey
-      const t = segLen2 > 0 ? Math.max(0, Math.min(1, (fx * ex + fy * ey) / segLen2)) : 0
-      const projLat = p0.lat + t * (p1.lat - p0.lat)
-      const projLon = p0.lon + t * (p1.lon - p0.lon)
-      const d = distMeters(lat, lon, projLat, projLon)
-      if (d < minD) { minD = d; bestSeg = i; bestT = t }
-    }
-
-    pathProgressRef.current = bestSeg
-
-    const p0 = path[bestSeg], p1 = path[bestSeg + 1]
-    const proj = {
-      lat: p0.lat + bestT * (p1.lat - p0.lat),
-      lon: p0.lon + bestT * (p1.lon - p0.lon),
-    }
-    return [proj, ...path.slice(bestSeg + 1)]
+    return cPath.slice(cPath.length - 1)
   }, [telemetry?.position.lat, telemetry?.position.lon, path, pois])
 
   const pathGeoJson = useMemo(() => ({
@@ -307,20 +273,12 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
     }
   }, [telemetry?.position.lat, telemetry?.position.lon])
 
-  // Dashed approach line: drone → tangent point on the first loiter circle.
-  // Visible whenever the drone is outside that circle (i.e. hasn't started the mission yet).
   const approachGeoJson = useMemo(() => {
     if (!telemetry || pois.length < 1 || path.length < 1)
       return { type: 'FeatureCollection' as const, features: [] }
-    const drone = telemetry.position
-    const poi0  = pois[0]
-    const distToCenter = distMeters(drone.lat, drone.lon, poi0.lat, poi0.lon)
-    if (distToCenter <= poi0.loiter_radius)
+    if (DEMO_MODE && demoState.pathDistanceM > 0)
       return { type: 'FeatureCollection' as const, features: [] }
-    const [tp1, tp2] = externalTangentPoints(drone.lat, drone.lon, poi0.lat, poi0.lon, poi0.loiter_radius)
-    const d1 = distMeters(tp1.lat, tp1.lon, path[0].lat, path[0].lon)
-    const d2 = distMeters(tp2.lat, tp2.lon, path[0].lat, path[0].lon)
-    const target = d1 <= d2 ? tp1 : tp2
+    const drone = telemetry.position
     return {
       type: 'FeatureCollection' as const,
       features: [{
@@ -328,7 +286,7 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
         properties: {},
         geometry: {
           type: 'LineString' as const,
-          coordinates: [[drone.lon, drone.lat], [target.lon, target.lat]],
+          coordinates: [[drone.lon, drone.lat], [path[0].lon, path[0].lat]],
         },
       }],
     }

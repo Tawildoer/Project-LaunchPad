@@ -90,16 +90,23 @@ function lhsTangentAngle(c1: LatLon, r1: number, c2: LatLon, r2: number): number
   return normDeg(theta + alphaDeg - 90)
 }
 
-/**
- * Builds a smooth mission path connecting POI loiter circles with external tangent lines.
- *
- * 'cw' / 'short' — RHS tangent geometry, CW arcs (ArduPilot default, circles on right)
- * 'ccw' / 'long' — LHS tangent geometry, CCW arcs (circles on left, complementary arc spans)
- *
- * Every entry and exit is tangent — no kinks regardless of mode.
- * 'long' arcs are geometrically guaranteed to be 360° − ('cw' arc) at each waypoint.
- */
-export function buildMissionPath(pois: POIPath[], arcMode: ArcMode = 'cw'): LatLon[] {
+export function approachEntryAngle(
+  drone: LatLon,
+  center: LatLon,
+  radius: number,
+  arcMode: ArcMode,
+): number | undefined {
+  const d = distanceMeters(drone, center)
+  if (d <= radius) return undefined
+
+  const theta = mathBearingDeg(center, drone)
+  const beta = Math.acos(Math.min(1, radius / d)) * (180 / Math.PI)
+
+  const useCW = arcMode === 'cw' || arcMode === 'short'
+  return normDeg(useCW ? theta - beta : theta + beta)
+}
+
+export function buildMissionPath(pois: POIPath[], arcMode: ArcMode = 'cw', entryAngle?: number): LatLon[] {
   if (pois.length === 0) return []
 
   const S = 32  // arc samples
@@ -112,8 +119,9 @@ export function buildMissionPath(pois: POIPath[], arcMode: ArcMode = 'cw'): LatL
   if (pois.length === 1) {
     const c: LatLon = { lat: pois[0].lat, lon: pois[0].lon }
     const N = S * 2
+    const startAngle = entryAngle !== undefined ? entryAngle : 90
     for (let k = 0; k <= N; k++) {
-      result.push(pointOnCircle(c, pois[0].loiter_radius, 90 + loopDir * (360 * k) / N))
+      result.push(pointOnCircle(c, pois[0].loiter_radius, startAngle + loopDir * (360 * k) / N))
     }
     return result
   }
@@ -126,9 +134,9 @@ export function buildMissionPath(pois: POIPath[], arcMode: ArcMode = 'cw'): LatL
     ),
   )
 
-  // First circle: 180° entry arc from the opposite side of the departure tangent
   const c0: LatLon = { lat: pois[0].lat, lon: pois[0].lon }
-  result.push(...arcFn(c0, pois[0].loiter_radius, normDeg(tangAngles[0] + 180), tangAngles[0], S))
+  const firstArcStart = entryAngle !== undefined ? entryAngle : normDeg(tangAngles[0] + 180)
+  result.push(...arcFn(c0, pois[0].loiter_radius, firstArcStart, tangAngles[0], S))
 
   for (let i = 1; i < pois.length; i++) {
     const center: LatLon = { lat: pois[i].lat, lon: pois[i].lon }

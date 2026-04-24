@@ -45,6 +45,7 @@ export interface POI {
   alt: number
   loiter_radius: number
   dwell_seconds: number
+  arc_mode: 'cw' | 'ccw' | 'short' | 'long'
 }
 
 export interface WsMessage<T = unknown> {
