@@ -215,10 +215,10 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
   const pathRef = useRef(path)
   pathRef.current = path
 
-  // Send mission to backend/sim when POIs are added pre-flight only
+  // Send mission to backend/sim when POIs are added
   const prevSendCountRef = useRef(0)
   useEffect(() => {
-    if (pois.length === 0 || pois.length <= prevSendCountRef.current || pathJoinedRef.current) {
+    if (pois.length === 0 || pois.length <= prevSendCountRef.current) {
       prevSendCountRef.current = pois.length
       return
     }
@@ -305,7 +305,16 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
       lat: p0.lat + tClamped * (p1.lat - p0.lat),
       lon: p0.lon + tClamped * (p1.lon - p0.lon),
     }
-    return [proj, ...fp.slice(seg + 1)]
+
+    // Render from the LIVE path (includes new POIs) by finding the
+    // closest point on it to the consumption position
+    let liveSeg = 0
+    let liveMinD = Infinity
+    for (let i = 0; i < path.length - 1; i++) {
+      const d = distMeters(proj.lat, proj.lon, path[i].lat, path[i].lon)
+      if (d < liveMinD) { liveMinD = d; liveSeg = i }
+    }
+    return [proj, ...path.slice(liveSeg + 1)]
   }, [telemetry?.position.lat, telemetry?.position.lon, path])
 
   // Remove POI when progress moves past its arc onto tangent/next POI
