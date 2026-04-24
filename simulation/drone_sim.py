@@ -223,20 +223,9 @@ class DroneState:
             self.armed = False
         elif cmd_type == "send_mission":
             new_path = cmd.get("path", [])
-            was_flying = self.mode == "AUTO" and len(self.mission_path) > 0
-            self.mission_path = new_path
+            self.mission_path = cmd.get("path", [])
             self.pois = cmd.get("pois", [])
-            if was_flying and new_path:
-                best_i = 0
-                best_d = float("inf")
-                for i, pt in enumerate(new_path):
-                    d = dist_m(self.lat, self.lon, pt["lat"], pt["lon"])
-                    if d < best_d:
-                        best_d = d
-                        best_i = i
-                self.path_index = best_i
-            else:
-                self.path_index = 0
+            self.path_index = 0
             if self.armed and self.mission_path:
                 self.mode = "AUTO"
         elif cmd_type == "set_mode":
