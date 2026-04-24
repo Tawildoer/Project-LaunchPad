@@ -135,7 +135,7 @@ class DroneState:
             self.mission_path[self.path_index]["lat"],
             self.mission_path[self.path_index]["lon"],
         )
-        lookahead_m = max(self.speed * 0.5, d_to_target * 0.3)
+        lookahead_m = max(self.speed * 1.0, d_to_target * 0.5)
 
         # Walk forward from current index by lookahead distance
         dist_left = lookahead_m
