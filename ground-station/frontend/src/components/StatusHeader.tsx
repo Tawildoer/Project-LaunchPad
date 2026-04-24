@@ -1,0 +1,41 @@
+import { useEffect, useState } from 'react'
+import { useTelemetry } from '../store/TelemetryContext'
+import type { ConnectionStatus } from '../types'
+
+const STATUS_COLOURS: Record<ConnectionStatus, string> = {
+  connected:    'var(--green)',
+  reconnecting: 'var(--amber)',
+  disconnected: 'var(--red)',
+}
+
+function Clock() {
+  const [time, setTime] = useState(() => new Date().toTimeString().slice(0, 8))
+  useEffect(() => {
+    const id = setInterval(() => setTime(new Date().toTimeString().slice(0, 8)), 1000)
+    return () => clearInterval(id)
+  }, [])
+  return <span>{time}</span>
+}
+
+export default function StatusHeader() {
+  const { connectionStatus } = useTelemetry()
+
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '0 12px',
+      borderBottom: '1px solid var(--border)',
+      height: '100%',
+      fontSize: 'var(--text-sm)',
+      letterSpacing: '0.1em',
+    }}>
+      <span>▌ <span>PROJECT LAUNCHPAD</span></span>
+      <span style={{ color: STATUS_COLOURS[connectionStatus] }}>
+        ● <span>{connectionStatus.toUpperCase()}</span>
+      </span>
+      <Clock />
+    </div>
+  )
+}

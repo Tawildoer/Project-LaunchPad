@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react'
+import StatusHeader from './components/StatusHeader'
 
 export default function App() {
   const [leftPct, setLeftPct] = useState(50)
@@ -27,9 +28,7 @@ export default function App() {
 
   return (
     <div className="app" style={{ position: 'relative' }}>
-      <div style={{ borderBottom: '1px solid var(--border)', padding: '0 12px', display: 'flex', alignItems: 'center' }}>
-        STATUS HEADER
-      </div>
+      <StatusHeader />
       <div className="panels" ref={panelsRef}>
         <div className="panel" style={{ width: `${leftPct}%` }}>
           MAP PANEL
