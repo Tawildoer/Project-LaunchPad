@@ -224,9 +224,11 @@ class DroneState:
         elif cmd_type == "send_mission":
             new_path = cmd.get("path", [])
             was_flying = self.mode == "AUTO" and len(self.mission_path) > 0
+            old_len = len(self.mission_path)
             self.mission_path = new_path
             self.pois = cmd.get("pois", [])
-            if was_flying and new_path:
+            if was_flying and new_path and len(new_path) < old_len:
+                # POI removed: find where the drone is in the shorter path
                 best_i = 0
                 best_d = float("inf")
                 for i, pt in enumerate(new_path):
@@ -235,7 +237,7 @@ class DroneState:
                         best_d = d
                         best_i = i
                 self.path_index = best_i
-            else:
+            elif not was_flying:
                 self.path_index = 0
             if self.armed and self.mission_path:
                 self.mode = "AUTO"
