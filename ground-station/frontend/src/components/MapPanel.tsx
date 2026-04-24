@@ -351,7 +351,7 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
 
         <Source id="trail" type="geojson" data={trailGeoJson}>
           <Layer id="trail-line" type="line"
-            paint={{ 'line-color': '#666', 'line-width': 1.5, 'line-opacity': ['get', 'opacity'], 'line-dasharray': [2, 4] }} />
+            paint={{ 'line-color': '#666', 'line-width': 1.5, 'line-opacity': ['get', 'opacity'] }} />
         </Source>
 
         <Source id="approach" type="geojson" data={approachGeoJson}>
