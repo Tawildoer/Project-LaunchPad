@@ -86,6 +86,8 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
   const followTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const poiEntryRef     = useRef<Record<string, number>>({})
   const trailRef        = useRef<{ lat: number; lon: number }[]>([])
+  const trailSnapshotRef = useRef<{ lat: number; lon: number }[]>([])
+  const trailCountRef   = useRef(0)
   const pathProgressRef = useRef(0)
   const pathJoinedRef   = useRef(false)
   const consumptionPathRef = useRef<{ lat: number; lon: number }[]>([])
@@ -107,6 +109,10 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
     const trail = trailRef.current
     trail.push({ lat, lon })
     if (trail.length > 10000) trail.splice(0, trail.length - 10000)
+    trailCountRef.current++
+    if (trailCountRef.current % 15 === 0) {
+      trailSnapshotRef.current = [...trail]
+    }
   }, [telemetry?.position.lat, telemetry?.position.lon])
 
   useEffect(() => {
@@ -284,7 +290,7 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
   const trailGeoJson = useMemo(() => {
     const empty = { type: 'FeatureCollection' as const, features: [] as { type: 'Feature'; properties: Record<string, number>; geometry: { type: 'LineString'; coordinates: [number, number][] } }[] }
     if (settings.trailMode === 'off') return empty
-    const trail = trailRef.current
+    const trail = trailSnapshotRef.current
     if (trail.length < 2) return empty
 
     const makeFeat = (pts: { lat: number; lon: number }[], opacity: number) => ({
@@ -351,7 +357,7 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
 
         <Source id="trail" type="geojson" data={trailGeoJson}>
           <Layer id="trail-line" type="line"
-            paint={{ 'line-color': '#666', 'line-width': 1.5, 'line-opacity': ['get', 'opacity'] }} />
+            paint={{ 'line-color': '#666', 'line-width': 1.5, 'line-opacity': ['get', 'opacity'], 'line-dasharray': [2, 4] }} />
         </Source>
 
         <Source id="approach" type="geojson" data={approachGeoJson}>
