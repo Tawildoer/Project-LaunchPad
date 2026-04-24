@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react'
 import StatusHeader from './components/StatusHeader'
 import CommandBar from './components/CommandBar'
+import MapPanel from './components/MapPanel'
 
 export default function App() {
   const [leftPct, setLeftPct] = useState(50)
@@ -32,7 +33,7 @@ export default function App() {
       <StatusHeader />
       <div className="panels" ref={panelsRef}>
         <div className="panel" style={{ width: `${leftPct}%` }}>
-          MAP PANEL
+          <MapPanel />
         </div>
         <div
           className="panel-divider"
