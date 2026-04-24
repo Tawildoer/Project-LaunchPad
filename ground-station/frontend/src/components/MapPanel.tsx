@@ -91,6 +91,7 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
   const pathProgressRef = useRef(0)
   const pathJoinedRef   = useRef(false)
   const consumptionPathRef = useRef<{ lat: number; lon: number }[]>([])
+  const prevPoiCountRef = useRef(0)
 
   const initialLat = telemetry?.position.lat ?? DEFAULT_LAT
   const initialLon = telemetry?.position.lon ?? DEFAULT_LON
@@ -234,9 +235,14 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
   )
 
   useEffect(() => {
-    pathProgressRef.current = 0
-    pathJoinedRef.current = false
-    consumptionPathRef.current = []
+    const added = pois.length > prevPoiCountRef.current
+    const cleared = pois.length === 0
+    prevPoiCountRef.current = pois.length
+    if (added || cleared) {
+      pathProgressRef.current = 0
+      pathJoinedRef.current = false
+      consumptionPathRef.current = []
+    }
   }, [pois, effectiveArcMode])
 
   const remainingPath = useMemo(() => {
