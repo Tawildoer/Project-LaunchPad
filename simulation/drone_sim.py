@@ -140,8 +140,9 @@ class DroneState:
                     self.mode = "LOITER"
 
     def telemetry_dict(self) -> dict:
-        gps_lat = self.lat + (random.random() - 0.5) * 2 * (1 / DEG_TO_M)
-        gps_lon = self.lon + (random.random() - 0.5) * 2 * (
+        noise = 2.0 if self.armed else 0.3
+        gps_lat = self.lat + (random.random() - 0.5) * noise * (1 / DEG_TO_M)
+        gps_lon = self.lon + (random.random() - 0.5) * noise * (
             1 / (DEG_TO_M * math.cos(math.radians(self.lat)))
         )
 
@@ -176,7 +177,7 @@ class DroneState:
         cmd_type = cmd.get("type")
         if cmd_type == "arm":
             self.armed = True
-            self.mode = "STABILIZE"
+            self.mode = "AUTO" if self.pois else "STABILIZE"
         elif cmd_type == "disarm":
             self.armed = False
         elif cmd_type == "send_mission":
@@ -248,6 +249,7 @@ def main() -> None:
     parser.add_argument("--speed", type=float, default=18.0)
     parser.add_argument("--wind", type=float, default=3.0)
     parser.add_argument("--turn-radius", type=float, default=80.0)
+    parser.add_argument("--armed", action="store_true", help="Start drone pre-armed")
     args = parser.parse_args()
 
     drone = DroneState(
@@ -257,6 +259,9 @@ def main() -> None:
         wind_speed=args.wind,
         min_turn_radius=args.turn_radius,
     )
+
+    if args.armed:
+        drone.armed = True
 
     asyncio.run(sim_server(args.host, args.port, drone))
 
