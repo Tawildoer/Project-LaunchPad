@@ -185,7 +185,35 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
   const handleClearPath = useCallback(() => {
     clearPois()
     trailRef.current = []
+    trailSnapshotRef.current = []
   }, [clearPois])
+
+  const handleTestPath = useCallback(() => {
+    clearPois()
+    trailRef.current = []
+    trailSnapshotRef.current = []
+    const base = telemetry
+      ? { lat: telemetry.position.lat, lon: telemetry.position.lon }
+      : { lat: DEFAULT_LAT, lon: DEFAULT_LON }
+    const r = settings.loiterRadius
+    const am = settings.arcMode
+    const offsets = [
+      { dlat:  0.004, dlon:  0.003 },
+      { dlat:  0.007, dlon: -0.004 },
+      { dlat:  0.002, dlon: -0.009 },
+    ]
+    offsets.forEach((o, i) => {
+      addPoi({
+        id: `TEST-${i + 1}`,
+        lat: base.lat + o.dlat,
+        lon: base.lon + o.dlon,
+        alt: 80,
+        loiter_radius: r,
+        dwell_seconds: 30,
+        arc_mode: am,
+      })
+    })
+  }, [clearPois, addPoi, telemetry, settings.loiterRadius, settings.arcMode])
 
   const handleClick = useCallback((e: MapMouseEvent) => {
     const id = `POI-${String(Date.now()).slice(-4)}`
@@ -425,7 +453,7 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
         )}
       </Map>
 
-      {!isPip && (telemetry || pois.length > 0) && (
+      {!isPip && (
         <div className="map-controls">
           {telemetry && (
             <button onClick={handleRecentre} className={following ? 'active' : ''}>
@@ -433,6 +461,7 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
             </button>
           )}
           {pois.length > 0 && <button onClick={handleClearPath}>CLEAR PATH</button>}
+          <button onClick={handleTestPath}>TEST PATH</button>
         </div>
       )}
 
