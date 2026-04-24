@@ -205,10 +205,17 @@ class DroneState:
         elif cmd_type == "disarm":
             self.armed = False
         elif cmd_type == "send_mission":
-            self.mission_path = cmd.get("path", [])
+            new_path = cmd.get("path", [])
+            was_flying = self.mode == "AUTO" and len(self.mission_path) > 0
+            self.mission_path = new_path
             self.pois = cmd.get("pois", [])
-            self.path_index = 0
-            self._initial_approach = True
+            if was_flying:
+                # Mid-flight update: skip approach, let projection catch up
+                self._initial_approach = False
+            else:
+                # Fresh mission
+                self.path_index = 0
+                self._initial_approach = True
             if self.armed and self.mission_path:
                 self.mode = "AUTO"
         elif cmd_type == "set_mode":
