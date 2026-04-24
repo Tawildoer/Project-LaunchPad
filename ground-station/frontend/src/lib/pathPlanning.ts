@@ -142,6 +142,17 @@ export function buildMissionPath(pois: POIPath[], arcMode: ArcMode = 'cw', entry
     const center: LatLon = { lat: pois[i].lat, lon: pois[i].lon }
     const arrival = tangAngles[i - 1]
 
+    // Interpolate the tangent segment between circles
+    const prev = result[result.length - 1]
+    const next = pointOnCircle(center, pois[i].loiter_radius, arrival)
+    const tangentLen = distanceMeters(prev, next)
+    const SPACING = 15
+    const steps = Math.max(1, Math.floor(tangentLen / SPACING))
+    for (let s = 1; s < steps; s++) {
+      const f = s / steps
+      result.push({ lat: prev.lat + f * (next.lat - prev.lat), lon: prev.lon + f * (next.lon - prev.lon) })
+    }
+
     if (i === pois.length - 1) {
       // Last circle: continuous full loop from the arrival tangent
       const N = S * 2
