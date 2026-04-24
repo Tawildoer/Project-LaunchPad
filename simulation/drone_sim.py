@@ -61,9 +61,8 @@ class DroneState:
         self.wind_gust = 0.0
 
         self.pois: list[dict] = []
-        self.current_poi_index = 0
-        self.loiter_start: float | None = None
-        self.loiter_target_angle = 0.0
+        self.mission_path: list[dict] = []
+        self.path_index = 0
 
     def tick(self, dt: float) -> None:
         self.battery = max(0.0, self.battery - 0.0003 * dt)
@@ -76,8 +75,8 @@ class DroneState:
         if not self.armed:
             return
 
-        if self.mode == "AUTO" and self.pois:
-            self._steer_mission(dt)
+        if self.mode == "AUTO" and self.mission_path:
+            self._follow_path(dt)
         elif self.mode == "RTL":
             self._steer_toward(self.home_lat, self.home_lon, dt)
             if dist_m(self.lat, self.lon, self.home_lat, self.home_lon) < 10:
@@ -103,41 +102,17 @@ class DroneState:
         clamped = max(-max_rate, min(max_rate, error))
         self.heading = (self.heading + clamped) % 360
 
-    def _steer_mission(self, dt: float) -> None:
-        if self.current_poi_index >= len(self.pois):
+    def _follow_path(self, dt: float) -> None:
+        if self.path_index >= len(self.mission_path):
             self.mode = "LOITER"
             return
 
-        poi = self.pois[self.current_poi_index]
-        center_lat, center_lon = poi["lat"], poi["lon"]
-        radius = poi["loiter_radius"]
-        d = dist_m(self.lat, self.lon, center_lat, center_lon)
+        target = self.mission_path[self.path_index]
+        d = dist_m(self.lat, self.lon, target["lat"], target["lon"])
+        self._steer_toward(target["lat"], target["lon"], dt)
 
-        if self.loiter_start is None:
-            if d <= radius * 1.1:
-                self.loiter_start = time.time()
-                self.loiter_target_angle = bearing_deg(
-                    center_lat, center_lon, self.lat, self.lon
-                )
-            else:
-                self._steer_toward(center_lat, center_lon, dt)
-        else:
-            orbit_rate = math.degrees(self.speed / radius) * dt
-            self.loiter_target_angle = (self.loiter_target_angle + orbit_rate) % 360
-            target_rad = math.radians(self.loiter_target_angle)
-            cos_c = math.cos(math.radians(center_lat))
-            target_lat = center_lat + (radius * math.cos(target_rad)) / DEG_TO_M
-            target_lon = center_lon + (radius * math.sin(target_rad)) / (
-                DEG_TO_M * cos_c
-            )
-            self._steer_toward(target_lat, target_lon, dt)
-
-            dwell = poi.get("dwell_seconds", 60)
-            if time.time() - self.loiter_start >= dwell:
-                self.loiter_start = None
-                self.current_poi_index += 1
-                if self.current_poi_index >= len(self.pois):
-                    self.mode = "LOITER"
+        if d < 30:
+            self.path_index += 1
 
     def telemetry_dict(self) -> dict:
         noise = 2.0 if self.armed else 0.3
@@ -177,31 +152,29 @@ class DroneState:
         cmd_type = cmd.get("type")
         if cmd_type == "arm":
             self.armed = True
-            self.mode = "AUTO" if self.pois else "STABILIZE"
+            self.mode = "AUTO" if self.mission_path else "STABILIZE"
         elif cmd_type == "disarm":
             self.armed = False
         elif cmd_type == "send_mission":
+            new_path = cmd.get("path", [])
             new_pois = cmd.get("pois", [])
-            current_id = (
-                self.pois[self.current_poi_index]["id"]
-                if self.current_poi_index < len(self.pois)
-                else None
-            )
-            self.pois = new_pois
-            if current_id:
-                new_idx = next(
-                    (i for i, p in enumerate(new_pois) if p.get("id") == current_id),
-                    None,
-                )
-                if new_idx is not None:
-                    self.current_poi_index = new_idx
-                else:
-                    self.current_poi_index = 0
-                    self.loiter_start = None
+            if new_path and self.mission_path:
+                # Find the closest point in the new path to continue from
+                best_i = 0
+                best_d = float("inf")
+                for i, pt in enumerate(new_path):
+                    d = dist_m(self.lat, self.lon, pt["lat"], pt["lon"])
+                    if d < best_d:
+                        best_d = d
+                        best_i = i
+                self.mission_path = new_path
+                self.pois = new_pois
+                self.path_index = best_i
             else:
-                self.current_poi_index = 0
-                self.loiter_start = None
-            if self.armed and self.pois:
+                self.mission_path = new_path
+                self.pois = new_pois
+                self.path_index = 0
+            if self.armed and self.mission_path:
                 self.mode = "AUTO"
         elif cmd_type == "set_mode":
             self.mode = cmd.get("mode", self.mode)

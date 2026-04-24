@@ -3,7 +3,6 @@ import {
   useContext,
   useState,
   useCallback,
-  useEffect,
   type ReactNode,
 } from 'react'
 import { useTelemetry } from './TelemetryContext'
@@ -42,18 +41,6 @@ export function MissionProvider({ children }: { children: ReactNode }) {
     },
     [send, pois],
   )
-
-  useEffect(() => {
-    if (pois.length > 0) {
-      send({
-        type: 'command',
-        payload: { type: 'send_mission', pois: pois.map(p => ({
-          id: p.id, lat: p.lat, lon: p.lon, alt: p.alt,
-          loiter_radius: p.loiter_radius, dwell_seconds: p.dwell_seconds,
-        })) },
-      })
-    }
-  }, [pois, send])
 
   return (
     <MissionContext.Provider value={{ pois, addPoi, removePoi, clearPois, sendMission }}>

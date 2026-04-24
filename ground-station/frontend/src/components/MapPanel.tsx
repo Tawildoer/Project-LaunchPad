@@ -74,7 +74,7 @@ function distMeters(lat1: number, lon1: number, lat2: number, lon2: number): num
 
 
 export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
-  const { telemetry } = useTelemetry()
+  const { telemetry, send } = useTelemetry()
   const { pois, addPoi, removePoi, clearPois } = useMission()
   const { settings } = useSettings()
   const [tileLayer, setTileLayer] = useState<TileLayerType>('vector')
@@ -200,6 +200,23 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
   }, [telemetry])
 
   const effectiveArcMode = pois.length > 0 ? pois[0].arc_mode : settings.arcMode
+
+  // Send mission + dense path to backend/sim when POIs change
+  useEffect(() => {
+    if (pois.length === 0) return
+    const missionPath = buildMissionPath(pois, effectiveArcMode)
+    send({
+      type: 'command',
+      payload: {
+        type: 'send_mission',
+        pois: pois.map(p => ({
+          id: p.id, lat: p.lat, lon: p.lon, alt: p.alt,
+          loiter_radius: p.loiter_radius, dwell_seconds: p.dwell_seconds,
+        })),
+        path: missionPath.map(p => ({ lat: p.lat, lon: p.lon })),
+      },
+    })
+  }, [pois, effectiveArcMode, send])
 
   const entryAngle = useMemo(() => {
     if (!telemetry || pois.length < 1) return undefined
