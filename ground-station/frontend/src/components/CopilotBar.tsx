@@ -3,6 +3,7 @@ import { useTelemetry } from '../store/TelemetryContext'
 import type { CopilotResponse, WsMessage } from '../types'
 
 const SESSION_ID = crypto.randomUUID()
+const DEMO_MODE = !import.meta.env.VITE_WS_URL
 
 interface Message {
   role: 'user' | 'assistant'
@@ -41,7 +42,7 @@ export default function CopilotBar() {
 
   const submit = useCallback(() => {
     const text = input.trim()
-    if (!text) return
+    if (!text || DEMO_MODE) return
     setInput('')
     setMessages((prev) => [...prev, { role: 'user', text }])
     setShowHistory(true)
@@ -75,8 +76,8 @@ export default function CopilotBar() {
       {showHistory && messages.length > 0 && (
         <div className="copilot-response" ref={historyRef}>
           {messages.map((m, i) => (
-            <div key={i} style={{ marginBottom: 4 }}>
-              <span style={{ color: m.role === 'user' ? 'var(--green-dim)' : 'var(--green)' }}>
+            <div key={i} style={{ marginBottom: 6 }}>
+              <span style={{ color: m.role === 'user' ? 'var(--fg-dim)' : 'var(--fg)' }}>
                 {m.role === 'user' ? '> ' : '◈ '}
               </span>
               {m.text}
@@ -94,17 +95,21 @@ export default function CopilotBar() {
       )}
       <div className="copilot-bar">
         <span className="copilot-prefix">▌ copilot&gt;</span>
-        <input
-          className="copilot-input"
-          type="text"
-          value={input}
-          placeholder="copilot — type a command or question..."
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={onKeyDown}
-          onFocus={() => messages.length > 0 && setShowHistory(true)}
-          spellCheck={false}
-          autoComplete="off"
-        />
+        {DEMO_MODE ? (
+          <span className="copilot-offline">NO BACKEND — start ground-station/backend to use copilot</span>
+        ) : (
+          <input
+            className="copilot-input"
+            type="text"
+            value={input}
+            placeholder="type a command or question..."
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={onKeyDown}
+            onFocus={() => messages.length > 0 && setShowHistory(true)}
+            spellCheck={false}
+            autoComplete="off"
+          />
+        )}
       </div>
     </div>
   )

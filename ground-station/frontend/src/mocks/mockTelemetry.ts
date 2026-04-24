@@ -3,8 +3,8 @@ import type { Telemetry, ConnectionStatus } from '../types'
 type TelemetryCallback = (t: Telemetry) => void
 type StatusCallback = (s: ConnectionStatus) => void
 
-const CENTER_LAT = 51.505
-const CENTER_LON = -0.09
+const CENTER_LAT = -37.854   // Glen Iris, Melbourne, Australia
+const CENTER_LON = 145.059
 const ORBIT_RADIUS_DEG = 0.002
 
 export function createMockTelemetryEmitter(

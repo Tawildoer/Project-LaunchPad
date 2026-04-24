@@ -6,13 +6,13 @@
 
 :root {
   --bg:           #0d0f0e;
-  --bg-surface:   #111412;
-  --green:        #39ff14;
-  --green-dim:    #4a9e5c;
-  --green-faint:  #1a3d20;
+  --bg-surface:   #141414;
+  --fg:           #c8c8c8;
+  --fg-dim:       #666666;
+  --fg-faint:     #1c1c1c;
   --amber:        #ffb700;
   --red:          #ff3b3b;
-  --border:       rgba(57, 255, 20, 0.2);
+  --border:       rgba(200, 200, 200, 0.15);
   --font:         'JetBrains Mono', 'Fira Code', monospace;
   --text-sm:      11px;
   --text-base:    13px;
@@ -23,7 +23,7 @@ html, body, #root {
   height: 100%;
   overflow: hidden;
   background: var(--bg);
-  color: var(--green);
+  color: var(--fg);
   font-family: var(--font);
   font-size: var(--text-base);
   -webkit-font-smoothing: antialiased;
@@ -33,88 +33,111 @@ button {
   font-family: var(--font);
   font-size: var(--text-sm);
   background: transparent;
-  color: var(--green);
-  border: 1px solid var(--green);
+  color: var(--fg);
+  border: 1px solid var(--fg-dim);
   padding: 3px 10px;
   cursor: pointer;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 
-button:hover { background: var(--green-faint); }
+button:hover { background: var(--fg-faint); }
 button:disabled { opacity: 0.35; cursor: not-allowed; }
 
 input[type="text"], input[type="number"] {
   font-family: var(--font);
   font-size: var(--text-sm);
   background: var(--bg-surface);
-  color: var(--green);
+  color: var(--fg);
   border: 1px solid var(--border);
   padding: 3px 8px;
   outline: none;
 }
 
 input[type="text"]:focus, input[type="number"]:focus {
-  border-color: var(--green);
+  border-color: var(--fg-dim);
+}
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 1px;
+  background: var(--border);
+  outline: none;
+  cursor: pointer;
+  width: 100%;
+  padding: 0;
+  border: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 8px;
+  height: 14px;
+  background: var(--fg-dim);
+  border-radius: 0;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  background: var(--fg);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 8px;
+  height: 14px;
+  background: var(--fg-dim);
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
 }
 
 .app {
   display: grid;
-  grid-template-rows: 36px 1fr 44px 52px;
+  grid-template-rows: 36px 1fr 44px 72px;
   height: 100%;
   background: var(--bg);
 }
 
 .panels {
-  display: flex;
+  position: relative;
   overflow: hidden;
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
 }
 
-.panel {
+.panel-main {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.panel-pip {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  width: 280px;
+  height: 180px;
+  z-index: 500;
+  border: 1px solid var(--border);
   overflow: hidden;
-  position: relative;
+  cursor: pointer;
+  transition: border-color 0.15s;
 }
 
-.panel-divider {
-  width: 4px;
-  background: var(--border);
-  cursor: col-resize;
-  flex-shrink: 0;
-  transition: background 0.1s;
+.panel-pip:hover {
+  border-color: var(--fg-dim);
 }
 
-.panel-divider:hover,
-.panel-divider.dragging {
-  background: var(--green-dim);
+.panel-pip-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  background: transparent;
 }
 
-.leaflet-container {
-  background: #0a0c0b !important;
-  height: 100%;
-}
-
-.leaflet-control-zoom a {
-  background: var(--bg-surface) !important;
-  color: var(--green) !important;
-  border-color: var(--border) !important;
-  font-family: var(--font) !important;
-}
-
-.leaflet-control-zoom a:hover {
-  background: var(--green-faint) !important;
-}
-
-.leaflet-popup-content-wrapper,
-.leaflet-popup-tip {
-  background: var(--bg-surface) !important;
-  color: var(--green) !important;
-  border: 1px solid var(--border) !important;
-  box-shadow: none !important;
-  font-family: var(--font) !important;
-  font-size: var(--text-sm) !important;
-}
 
 .tile-toggle {
   position: absolute;
@@ -126,8 +149,17 @@ input[type="text"]:focus, input[type="number"]:focus {
 }
 
 .tile-toggle button.active {
-  background: var(--green-faint);
-  border-color: var(--green);
+  background: var(--fg-faint);
+  border-color: var(--fg);
+}
+
+.map-controls {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 1000;
+  display: flex;
+  gap: 4px;
 }
 
 .video-panel {
@@ -136,7 +168,7 @@ input[type="text"]:focus, input[type="number"]:focus {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: #060807;
+  background: #0a0a0a;
   position: relative;
 }
 
@@ -145,7 +177,7 @@ input[type="text"]:focus, input[type="number"]:focus {
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  color: var(--green-dim);
+  color: var(--fg-dim);
   font-size: var(--text-sm);
   letter-spacing: 0.12em;
 }
@@ -167,62 +199,79 @@ input[type="text"]:focus, input[type="number"]:focus {
   top: 8px;
   left: 10px;
   font-size: var(--text-sm);
-  color: var(--green-dim);
+  color: var(--fg-dim);
   letter-spacing: 0.08em;
 }
 
 .copilot-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 12px;
-  border-top: 1px solid var(--border);
+  gap: 10px;
+  padding: 0 16px;
+  border-top: 1px solid rgba(200, 200, 200, 0.25);
+  background: #111111;
   height: 100%;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
 }
 
 .copilot-prefix {
-  color: var(--green-dim);
+  color: var(--fg);
   user-select: none;
+  font-size: var(--text-base);
+  letter-spacing: 0.06em;
+  flex-shrink: 0;
 }
 
 .copilot-input {
   flex: 1;
   background: transparent;
   border: none;
-  caret-color: var(--green);
-  color: var(--green);
+  caret-color: var(--fg);
+  color: var(--fg);
   font-family: var(--font);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   outline: none;
+}
+
+.copilot-input::placeholder {
+  color: var(--fg-dim);
+}
+
+.copilot-offline {
+  color: var(--fg-dim);
+  font-size: var(--text-sm);
+  letter-spacing: 0.08em;
 }
 
 .copilot-response {
   position: absolute;
-  bottom: 52px;
+  bottom: 72px;
   left: 0;
   right: 0;
-  background: var(--bg-surface);
+  background: #111111;
   border-top: 1px solid var(--border);
-  padding: 8px 12px;
+  padding: 10px 16px;
   font-size: var(--text-sm);
-  max-height: 120px;
+  max-height: 160px;
   overflow-y: auto;
   z-index: 100;
+  line-height: 1.6;
 }
 
 .copilot-confirmation {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-top: 6px;
+  margin-top: 8px;
 }
 
 .settings-overlay {
   position: fixed;
   top: 36px;
   right: 0;
-  width: 280px;
+  width: 320px;
+  max-height: calc(100vh - 36px);
+  overflow-y: auto;
   background: var(--bg-surface);
   border-left: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
@@ -231,15 +280,29 @@ input[type="text"]:focus, input[type="number"]:focus {
   font-size: var(--text-sm);
 }
 
+.settings-section-title {
+  color: var(--fg-dim);
+  letter-spacing: 0.12em;
+  font-size: var(--text-sm);
+  margin-bottom: 12px;
+  margin-top: 16px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 4px;
+}
+
+.settings-section-title:first-child {
+  margin-top: 0;
+}
+
 .settings-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 
 .settings-label {
-  color: var(--green-dim);
+  color: var(--fg-dim);
   letter-spacing: 0.06em;
 }
 
@@ -249,7 +312,29 @@ input[type="text"]:focus, input[type="number"]:focus {
 }
 
 .toggle-group button.active {
-  background: var(--green-faint);
-  border-color: var(--green);
-  color: var(--green);
+  background: var(--fg-faint);
+  border-color: var(--fg);
+  color: var(--fg);
+}
+
+.recent-connection-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--fg-dim);
+}
+
+.recent-connection-item:last-child {
+  border-bottom: none;
+}
+
+.recent-connection-addr {
+  color: var(--fg);
+}
+
+.recent-connection-time {
+  font-size: 10px;
+  color: var(--fg-dim);
 }

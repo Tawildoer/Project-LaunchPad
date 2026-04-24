@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState } from 'react'
 import StatusHeader from './components/StatusHeader'
 import CommandBar from './components/CommandBar'
 import MapPanel from './components/MapPanel'
@@ -6,51 +6,37 @@ import VideoPanel from './components/VideoPanel'
 import CopilotBar from './components/CopilotBar'
 import SettingsPanel from './components/SettingsPanel'
 
+type PipPanel = 'map' | 'video'
+
 export default function App() {
-  const [leftPct, setLeftPct] = useState(50)
-  const dragging = useRef(false)
-  const panelsRef = useRef<HTMLDivElement>(null)
-
-  const onMouseDown = useCallback(() => {
-    dragging.current = true
-
-    const onMove = (e: MouseEvent) => {
-      if (!dragging.current || !panelsRef.current) return
-      const rect = panelsRef.current.getBoundingClientRect()
-      const pct = ((e.clientX - rect.left) / rect.width) * 100
-      setLeftPct(Math.min(80, Math.max(20, pct)))
-    }
-
-    const onUp = () => {
-      dragging.current = false
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  }, [])
+  const [pip, setPip] = useState<PipPanel>('video')
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   return (
-    <div className="app" style={{ position: 'relative' }}>
-      <SettingsPanel />
-      <StatusHeader />
-      <div className="panels" ref={panelsRef}>
-        <div className="panel" style={{ width: `${leftPct}%` }}>
+    <div className="app">
+      <StatusHeader onSettingsToggle={() => setSettingsOpen(v => !v)} />
+      <SettingsPanel open={settingsOpen} />
+
+      <div className="panels">
+        {/* Map panel */}
+        <div className={pip === 'map' ? 'panel-pip' : 'panel-main'}>
+          {pip === 'map' && (
+            <div className="panel-pip-overlay" onClick={() => setPip('video')} />
+          )}
           <MapPanel />
         </div>
-        <div
-          className="panel-divider"
-          onMouseDown={onMouseDown}
-        />
-        <div className="panel" style={{ flex: 1 }}>
+
+        {/* Video panel */}
+        <div className={pip === 'video' ? 'panel-pip' : 'panel-main'}>
+          {pip === 'video' && (
+            <div className="panel-pip-overlay" onClick={() => setPip('map')} />
+          )}
           <VideoPanel />
         </div>
       </div>
+
       <CommandBar />
-      <div style={{ borderTop: '1px solid var(--border)', padding: '0 12px', display: 'flex', alignItems: 'center' }}>
-        <CopilotBar />
-      </div>
+      <CopilotBar />
     </div>
   )
 }
