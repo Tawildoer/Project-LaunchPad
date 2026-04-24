@@ -28,6 +28,7 @@ Project-LaunchPad/
 │   ├── webrtc-receiver/      # TypeScript — portable browser receiver component
 │   └── webrtc-signaling/     # Python — portable signaling server (transport-agnostic)
 ├── hardware/                 # CAD, BOM, wiring diagrams (future)
+├── simulation/               # ArduPilot SITL + Gazebo test environment (future)
 ├── shared/                   # JSON Schema — message contracts between all modules
 └── docs/superpowers/specs/   # Design documents
 ```

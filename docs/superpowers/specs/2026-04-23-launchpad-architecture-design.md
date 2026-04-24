@@ -289,6 +289,7 @@ Claude maintains conversation history within a browser session (cleared on page 
 
 ## 8. Future Work (Out of Scope for v1)
 
+- **Simulation suite** — ArduPilot SITL + Gazebo physics environment in `simulation/`. SITL runs ArduPilot in software and speaks MAVLink over UDP, allowing `drone-agent` and the full ground station stack to be tested without real hardware. Gazebo provides physics, GPS, IMU, and synthetic camera feed. Supports QuadPlane VTOL. Target: full end-to-end software testing before any real flight.
 - Bluetooth direct-connect for field troubleshooting
 - Public hosting of the ground station web app
 - Multi-drone support (architecture is designed for it — each drone joins Tailscale and registers with the backend)
