@@ -63,7 +63,6 @@ class DroneState:
         self.pois: list[dict] = []
         self.mission_path: list[dict] = []
         self.path_index = 0
-        self._initial_approach = False
 
     def tick(self, dt: float) -> None:
         self.battery = max(0.0, self.battery - 0.0003 * dt)
@@ -108,16 +107,6 @@ class DroneState:
             self.mode = "LOITER"
             return
 
-        # Initial approach: fly straight toward path[0] until close enough
-        # to join the path without spiraling
-        if getattr(self, "_initial_approach", False):
-            target = self.mission_path[0]
-            d = dist_m(self.lat, self.lon, target["lat"], target["lon"])
-            self._steer_toward(target["lat"], target["lon"], dt)
-            if d < self.speed * 1.5:
-                self._initial_approach = False
-            return
-
         # Advance past points the drone has passed
         steps = 0
         cos_lat = math.cos(math.radians(self.lat))
@@ -139,8 +128,14 @@ class DroneState:
             self.mode = "LOITER"
             return
 
-        # Pure pursuit
-        lookahead_m = self.speed * 0.5
+        # Adaptive lookahead: far from path → aim well ahead to align with
+        # the path direction; close → tight tracking
+        d_to_target = dist_m(
+            self.lat, self.lon,
+            self.mission_path[self.path_index]["lat"],
+            self.mission_path[self.path_index]["lon"],
+        )
+        lookahead_m = max(self.speed * 0.5, d_to_target * 0.3)
 
         # Walk forward from current index by lookahead distance
         dist_left = lookahead_m
@@ -209,13 +204,8 @@ class DroneState:
             was_flying = self.mode == "AUTO" and len(self.mission_path) > 0
             self.mission_path = new_path
             self.pois = cmd.get("pois", [])
-            if was_flying:
-                # Mid-flight update: skip approach, let projection catch up
-                self._initial_approach = False
-            else:
-                # Fresh mission
+            if not was_flying:
                 self.path_index = 0
-                self._initial_approach = True
             if self.armed and self.mission_path:
                 self.mode = "AUTO"
         elif cmd_type == "set_mode":
