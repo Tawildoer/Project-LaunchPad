@@ -85,6 +85,7 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
   const animFrameRef    = useRef<number | null>(null)
   const followTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastPoiIdRef    = useRef<string | null>(null)
+  const prevPoiCountRef = useRef(0)
   const trailRef        = useRef<{ lat: number; lon: number }[]>([])
   const trailSnapshotRef = useRef<{ lat: number; lon: number }[]>([])
   const trailCountRef   = useRef(0)
@@ -234,10 +235,14 @@ export default function MapPanel({ isPip = false }: { isPip?: boolean }) {
     })
   }, [pois, effectiveArcMode, send])
 
-  // Reset consumption on any POI change
+  // Reset consumption only on POI addition or clear, not removal
   useEffect(() => {
-    pathProgressRef.current = 0
-    pathJoinedRef.current = false
+    if (pois.length > prevPoiCountRef.current || pois.length === 0) {
+      pathProgressRef.current = 0
+      pathJoinedRef.current = false
+      lastPoiIdRef.current = null
+    }
+    prevPoiCountRef.current = pois.length
   }, [pois])
 
   // Path consumption: show full path until drone reaches it, then peel
