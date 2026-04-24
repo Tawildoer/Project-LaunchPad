@@ -113,48 +113,70 @@ class DroneState:
         while self.path_index < len(self.mission_path) - 1 and steps < 5:
             curr = self.mission_path[self.path_index]
             nxt = self.mission_path[self.path_index + 1]
-            ax = (nxt["lon"] - curr["lon"]) * cos_lat * DEG_TO_M
-            ay = (nxt["lat"] - curr["lat"]) * DEG_TO_M
-            bx = (self.lon - curr["lon"]) * cos_lat * DEG_TO_M
-            by = (self.lat - curr["lat"]) * DEG_TO_M
-            seg_len_sq = ax * ax + ay * ay
-            if seg_len_sq > 0 and (ax * bx + ay * by) / seg_len_sq >= 1.0:
+            d_curr = dist_m(self.lat, self.lon, curr["lat"], curr["lon"])
+            d_next = dist_m(self.lat, self.lon, nxt["lat"], nxt["lon"])
+            # Advance if closer to next point, OR if projection past segment end
+            if d_next < d_curr:
                 self.path_index += 1
                 steps += 1
             else:
-                break
+                ax = (nxt["lon"] - curr["lon"]) * cos_lat * DEG_TO_M
+                ay = (nxt["lat"] - curr["lat"]) * DEG_TO_M
+                bx = (self.lon - curr["lon"]) * cos_lat * DEG_TO_M
+                by = (self.lat - curr["lat"]) * DEG_TO_M
+                seg_len_sq = ax * ax + ay * ay
+                if seg_len_sq > 0 and (ax * bx + ay * by) / seg_len_sq >= 1.0:
+                    self.path_index += 1
+                    steps += 1
+                else:
+                    break
 
         if self.path_index >= len(self.mission_path):
             self.mode = "LOITER"
             return
 
-        # Adaptive lookahead: far from path → aim well ahead to align with
-        # the path direction; close → tight tracking
-        d_to_target = dist_m(
-            self.lat, self.lon,
-            self.mission_path[self.path_index]["lat"],
-            self.mission_path[self.path_index]["lon"],
-        )
-        lookahead_m = max(self.speed * 1.0, d_to_target * 0.5)
+        # Project drone onto current segment to find where we are on the path
+        curr = self.mission_path[self.path_index]
+        nxt_idx = min(self.path_index + 1, len(self.mission_path) - 1)
+        nxt = self.mission_path[nxt_idx]
+        ax = (nxt["lon"] - curr["lon"]) * cos_lat * DEG_TO_M
+        ay = (nxt["lat"] - curr["lat"]) * DEG_TO_M
+        bx = (self.lon - curr["lon"]) * cos_lat * DEG_TO_M
+        by = (self.lat - curr["lat"]) * DEG_TO_M
+        seg_len_sq = ax * ax + ay * ay
+        seg_len = math.sqrt(seg_len_sq) if seg_len_sq > 0 else 0.0
+        t = max(0.0, min(1.0, (ax * bx + ay * by) / seg_len_sq)) if seg_len_sq > 0 else 0.0
 
-        # Walk forward from current index by lookahead distance
+        # Walk lookahead forward from the drone's projection, not segment start
+        d_to_target = dist_m(self.lat, self.lon, curr["lat"], curr["lon"])
+        lookahead_m = max(self.speed * 1.0, d_to_target * 0.5)
+        remaining_on_seg = seg_len * (1.0 - t)
         dist_left = lookahead_m
-        walk = self.path_index
-        while walk < len(self.mission_path) - 1:
-            p0 = self.mission_path[walk]
-            p1 = self.mission_path[walk + 1]
-            sl = dist_m(p0["lat"], p0["lon"], p1["lat"], p1["lon"])
-            if sl >= dist_left:
-                frac = dist_left / sl if sl > 0 else 0.0
-                target_lat = p0["lat"] + frac * (p1["lat"] - p0["lat"])
-                target_lon = p0["lon"] + frac * (p1["lon"] - p0["lon"])
-                break
-            dist_left -= sl
-            walk += 1
+
+        if remaining_on_seg >= dist_left:
+            frac = t + dist_left / seg_len if seg_len > 0 else 1.0
+            target_lat = curr["lat"] + frac * (nxt["lat"] - curr["lat"])
+            target_lon = curr["lon"] + frac * (nxt["lon"] - curr["lon"])
         else:
-            last = self.mission_path[-1]
-            target_lat = last["lat"]
-            target_lon = last["lon"]
+            dist_left -= remaining_on_seg
+            walk = self.path_index + 1
+            target_lat = nxt["lat"]
+            target_lon = nxt["lon"]
+            while walk < len(self.mission_path) - 1:
+                p0 = self.mission_path[walk]
+                p1 = self.mission_path[walk + 1]
+                sl = dist_m(p0["lat"], p0["lon"], p1["lat"], p1["lon"])
+                if sl >= dist_left:
+                    frac = dist_left / sl if sl > 0 else 0.0
+                    target_lat = p0["lat"] + frac * (p1["lat"] - p0["lat"])
+                    target_lon = p0["lon"] + frac * (p1["lon"] - p0["lon"])
+                    break
+                dist_left -= sl
+                walk += 1
+            else:
+                last = self.mission_path[-1]
+                target_lat = last["lat"]
+                target_lon = last["lon"]
 
         self._steer_toward(target_lat, target_lon, dt)
 
