@@ -63,6 +63,7 @@ class DroneState:
         self.pois: list[dict] = []
         self.mission_path: list[dict] = []
         self.path_index = 0
+        self._initial_approach = False
 
     def tick(self, dt: float) -> None:
         self.battery = max(0.0, self.battery - 0.0003 * dt)
@@ -107,8 +108,17 @@ class DroneState:
             self.mode = "LOITER"
             return
 
-        # Advance past points the drone has passed (capped per tick to
-        # prevent skipping large portions on first receipt)
+        # Initial approach: fly straight toward path[0] until close enough
+        # to join the path without spiraling
+        if getattr(self, "_initial_approach", False):
+            target = self.mission_path[0]
+            d = dist_m(self.lat, self.lon, target["lat"], target["lon"])
+            self._steer_toward(target["lat"], target["lon"], dt)
+            if d < self.speed * 1.5:
+                self._initial_approach = False
+            return
+
+        # Advance past points the drone has passed
         steps = 0
         cos_lat = math.cos(math.radians(self.lat))
         while self.path_index < len(self.mission_path) - 1 and steps < 5:
@@ -129,7 +139,7 @@ class DroneState:
             self.mode = "LOITER"
             return
 
-        # Pure pursuit with tight lookahead for circle tracking
+        # Pure pursuit
         lookahead_m = self.speed * 0.5
 
         # Walk forward from current index by lookahead distance
@@ -198,6 +208,7 @@ class DroneState:
             self.mission_path = cmd.get("path", [])
             self.pois = cmd.get("pois", [])
             self.path_index = 0
+            self._initial_approach = True
             if self.armed and self.mission_path:
                 self.mode = "AUTO"
         elif cmd_type == "set_mode":
